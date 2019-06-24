@@ -1,0 +1,6 @@
+[package]
+name = "rasn"
+version = "0.1.0"
+authors = ["jadamcrain <jadamcrain@gmail.com>"]
+
+[dependencies]
