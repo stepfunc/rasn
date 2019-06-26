@@ -8,22 +8,9 @@ mod rasn {
 
     #[derive(Debug, PartialEq)]
     enum ASNToken<'a> {
-        BeginSequence(&'a[u8]),   // the interior data of the sequence
-        EndSequence,              // end of the last Sequence
-        /*
-        Integer,
-
-        BitString,
-        OctetString,
-        Null,
-        ObjectIdentifier,
-
-        Set,
-        PrintableString,
-        T61String,
-        IA5String,
-        UTCTime
-        */
+        BeginSequence(&'a[u8]),             // the interior data of the sequence
+        EndSequence,                        // end of the last Sequence
+        GenericTLV(&'static str, &'a[u8])   // any TLV
     }
 
     #[derive(Debug, PartialEq)]
@@ -56,6 +43,18 @@ mod rasn {
             )
         }
 
+        fn parse_generic_tlv<'a>(name: &'static str, input: &'a[u8]) -> ParseResult<'a, ASNToken<'a>> {
+            parse_length(input).and_then(
+                |result|  {
+                    if result.remainder.len() < result.value {
+                        Err(ParseError::InsufficientBytes(result.value, result.remainder))
+                    }
+                    else {
+                        parse_ok(ASNToken::GenericTLV(name, &result.remainder[0..result.value]), &result.remainder[result.value..])
+                    }
+                }
+            )
+        }
 
         if input.len() < 1 {
             return Err(ParseError::InsufficientBytes(1, input))
@@ -69,22 +68,23 @@ mod rasn {
         }
 
         match typ & 0b00111111 {
-           /*
-           0x02 => SimpleType::Integer,
-           0x03 => SimpleType::BitString,
-           0x04 => SimpleType::OctetString,
-           0x05 => SimpleType::Null,
-           0x06 => SimpleType::ObjectIdentifier,
-           */
+
+           0x02 => parse_generic_tlv("Integer", &input[1..]),
+           0x03 => parse_generic_tlv("BitString", &input[1..]),
+           0x04 => parse_generic_tlv("OctetString", &input[1..]),
+           0x05 => parse_generic_tlv("Null", &input[1..]),
+           0x06 => parse_generic_tlv("ObjectIdentifier", &input[1..]),
            0x30 => parse_seq(&input[1..]),
 
            /*
            0x31 => SimpleType::Set,
-           0x13 => SimpleType::PrintableString,
-           0x14 => SimpleType::T61String,
-           0x16 => SimpleType::IA5String,
-           0x17 => SimpleType::UTCTime,
            */
+
+           0x13 => parse_generic_tlv("PrintableString", &input[1..]),
+           0x14 => parse_generic_tlv("T61String", &input[1..]),
+           0x16 => parse_generic_tlv("IA5String", &input[1..]),
+           0x17 => parse_generic_tlv("UTCTime", &input[1..]),
+
            x => Err(ParseError::UnsupportedUniversalType(x))
         }
     }
