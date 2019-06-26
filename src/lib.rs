@@ -23,7 +23,7 @@ mod rasn {
         UTCTime,
         Unknown(u8)
     }
-    
+
     #[derive(Debug, PartialEq)]
     struct Tag {
         id : IdentifierType,
@@ -51,15 +51,11 @@ mod rasn {
         BadLengthEncoding(u8)
     }
 
+    type ParseResult<'a, T> = Result<ParseOk<'a, T>, ParseError<'a>>;
+
     fn parse_ok<T>(value : T,  remainder: &[u8]) -> ParseResult<T> {
         Ok(ParseOk { value, remainder })
     }
-
-    fn parse_err<T>(err : ParseError) -> ParseResult<T> {
-        Err(err)
-    }
-
-    type ParseResult<'a, T> = Result<ParseOk<'a, T>, ParseError<'a>>;
 
     fn parse_tlv(input: &[u8]) -> ParseResult<TLV> {
         if input.len() < 2 {
@@ -76,9 +72,7 @@ mod rasn {
 
             let tlv = TLV {tag, length : result.value, value: &remainder[..result.value]};
 
-            Ok(
-                ParseOk{value: tlv, remainder: &remainder[result.value..]}
-            )
+            parse_ok(tlv, &remainder[result.value..])
         }
         );
     }
@@ -115,8 +109,8 @@ mod rasn {
 
         fn decode_one(input: &[u8]) -> ParseResult<usize> {
             let value = input[0];
-            if value <= 127 {
-                parse_err(ParseError::BadLengthEncoding(value)) // should have been encoded in single byte
+            if value < 128 {
+                Err(ParseError::BadLengthEncoding(value)) // should have been encoded in single byte
             } else {
                 parse_ok(value as usize, &input[1..])
             }
@@ -145,7 +139,7 @@ mod rasn {
         let count = input[0] & 0b01111111;
 
         if top == 0 {
-            Ok(ParseOk{value: count as usize, remainder: &input[1..]})
+            parse_ok(count as usize, &input[1..])
         }
         else {
 
@@ -226,7 +220,7 @@ mod rasn {
 
         #[test]
         fn decode_length_on_empty_bytes_fails() {
-            assert_eq!(parse_length(&[]), parse_err(ParseError::InsufficientBytes(1, &[])))
+            assert_eq!(parse_length(&[]), Err(ParseError::InsufficientBytes(1, &[])))
         }
 
         #[test]
@@ -236,7 +230,7 @@ mod rasn {
 
         #[test]
         fn decode_length_on_count_of_one_returns_none_if_value_less_than_128() {
-            assert_eq!(parse_length(&[TOP_BIT | 1, 127]), parse_err(ParseError::BadLengthEncoding(127)))
+            assert_eq!(parse_length(&[TOP_BIT | 1, 127]), Err(ParseError::BadLengthEncoding(127)))
         }
 
         #[test]
@@ -261,7 +255,7 @@ mod rasn {
 
         #[test]
         fn decode_length_on_count_of_five_fails() {
-            assert_eq!(parse_length(&[TOP_BIT | 5, 0x01, 0x02, 0x03, 0x04, 0x05]), parse_err(ParseError::UnsupportedLengthByteCount(5)))
+            assert_eq!(parse_length(&[TOP_BIT | 5, 0x01, 0x02, 0x03, 0x04, 0x05]), Err(ParseError::UnsupportedLengthByteCount(5)))
         }
 
 
