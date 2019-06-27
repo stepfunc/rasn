@@ -9,7 +9,9 @@ mod rasn {
     #[derive(Debug, PartialEq)]
     enum ASNToken<'a> {
         BeginSequence(&'a[u8]),             // the interior data of the sequence
-        EndSequence,                        // end of the last Sequence
+        EndSequence,
+        BeginSet(&'a[u8]),                  // the interior data of the set
+        EndSet,
         GenericTLV(&'static str, &'a[u8])   // any TLV
     }
 
@@ -38,6 +40,19 @@ mod rasn {
                     }
                     else {
                         parse_ok(ASNToken::BeginSequence(&result.remainder[0..result.value]), &result.remainder[result.value..])
+                    }
+                }
+            )
+        }
+
+        fn parse_set(input: &[u8]) -> ParseResult<ASNToken> {
+            parse_length(input).and_then(
+                |result|  {
+                    if result.remainder.len() < result.value {
+                        Err(ParseError::InsufficientBytes(result.value, result.remainder))
+                    }
+                    else {
+                        parse_ok(ASNToken::BeginSet(&result.remainder[0..result.value]), &result.remainder[result.value..])
                     }
                 }
             )
@@ -74,16 +89,18 @@ mod rasn {
            0x04 => parse_generic_tlv("OctetString", &input[1..]),
            0x05 => parse_generic_tlv("Null", &input[1..]),
            0x06 => parse_generic_tlv("ObjectIdentifier", &input[1..]),
-           0x30 => parse_seq(&input[1..]),
-
-           /*
-           0x31 => SimpleType::Set,
-           */
-
+           0x0C => parse_generic_tlv("UTF8String", &input[1..]),
            0x13 => parse_generic_tlv("PrintableString", &input[1..]),
            0x14 => parse_generic_tlv("T61String", &input[1..]),
            0x16 => parse_generic_tlv("IA5String", &input[1..]),
            0x17 => parse_generic_tlv("UTCTime", &input[1..]),
+
+
+           0x30 => parse_seq(&input[1..]),
+           0x31 => parse_set(&input[1..]),
+
+
+
 
            x => Err(ParseError::UnsupportedUniversalType(x))
         }
@@ -140,6 +157,82 @@ mod rasn {
                 4 => decode_four(remainder),
                 _ => Err(ParseError::UnsupportedLengthByteCount(count))
             }
+        }
+    }
+
+    enum ParserState<'a> {
+        Continue(&'a[u8]),
+        EndSequence(&'a[u8]),
+        EndSet(&'a[u8])
+    }
+
+    struct Parser<'a> {
+        states: Vec<ParserState<'a>>
+    }
+
+    impl<'a> Parser<'a> {
+        fn new(input: &'a[u8]) -> Parser {
+            Parser { states: vec![ParserState::Continue(input)] }
+        }
+    }
+
+
+    impl<'a> Iterator for Parser<'a> {
+
+        type Item = ParseResult<'a, ASNToken<'a>>;
+
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.states.pop().map(
+                |current| {
+                    match current {
+                        ParserState::Continue(pos) => {
+                            match parse_one(pos) {
+                                Err(e) => {
+                                    self.states.clear();
+                                    Err(e)
+                                },
+                                Ok(token) => match token.value {
+                                    ASNToken::BeginSequence(contents) => {
+                                        self.states.push(ParserState::EndSequence(token.remainder));
+                                        if !contents.is_empty() {
+                                            self.states.push(ParserState::Continue(contents));
+                                        }
+                                        Ok(token)
+                                    },
+                                    ASNToken::BeginSet(contents) => {
+                                        self.states.push(ParserState::EndSet(token.remainder));
+                                        if !contents.is_empty() {
+                                            self.states.push(ParserState::Continue(contents));
+                                        }
+                                        Ok(token)
+                                    }
+                                    _ => {
+                                        if token.remainder.len() > 0 {
+                                            self.states.push(ParserState::Continue(token.remainder));
+                                        }
+                                        Ok(token)
+                                    }
+                                }
+                            }
+                        },
+                        ParserState::EndSequence(remainder) => {
+                            if !remainder.is_empty() {
+                                self.states.push(ParserState::Continue(remainder));
+                            }
+
+                            parse_ok(ASNToken::EndSequence, remainder)
+                        },
+                        ParserState::EndSet(remainder) => {
+                            if !remainder.is_empty() {
+                                self.states.push(ParserState::Continue(remainder));
+                            }
+
+                            parse_ok(ASNToken::EndSet, remainder)
+                        }
+                    }
+                }
+            )
         }
     }
 
@@ -210,8 +303,6 @@ mod rasn {
             assert_eq!(parse_one(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ParseError::InsufficientBytes(0x0F, &[0xDE, 0xAD])))
         }
 
-        /*
-
         const CERT_DATA : [u8; 534] = [
             0x30, 0x82, 0x02, 0x12, 0x30, 0x82, 0x01, 0x7b, 0x02, 0x02, 0x0d, 0xfa, 0x30, 0x0d, 0x06, 0x09,
             0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x05, 0x05, 0x00, 0x30, 0x81, 0x9b, 0x31, 0x0b,
@@ -248,28 +339,53 @@ mod rasn {
             0x5b, 0xfa, 0xfd, 0xdf, 0xb4, 0x31, 0xb2, 0xc1, 0x4a, 0x9c, 0x06, 0x25, 0x43, 0xa1, 0xe6, 0xb4,
             0x1e, 0x7f, 0x86, 0x9b, 0x16, 0x40
         ];
-        */
-
-        /*
-        #[test]
-        fn get_identifier_type_decodes_correctly() {
-            assert_eq!(get_identifier_type(1 << 6), IdentifierType::Application);
-            assert_eq!(get_identifier_type(1 << 7), IdentifierType::ContextSpecific);
-            assert_eq!(get_identifier_type(0xFF), IdentifierType::Private);
-            assert_eq!(get_identifier_type(3), IdentifierType::Universal);
-        }
 
         #[test]
-        fn get_simple_type_decodes_correctly() {
-            assert_eq!(get_simple_type(0x02), SimpleType::Integer);
-            assert_eq!(get_simple_type(0x03), SimpleType::BitString);
-            assert_eq!(get_simple_type(0xFF), SimpleType::Unknown(0x3F));
+        fn iterates_over_x509() {
+
+            let mut indent : usize = 0;
+
+            let parser = Parser::new(&CERT_DATA);
+
+            fn print_indent(indent: usize) {
+                for i in 0..indent {
+                    print!("    ");
+                }
+            }
+
+            for result in parser {
+                match result {
+                    Err(x) => println!("{:?}", x),
+                    Ok(token) => match token.value {
+                       ASNToken::BeginSequence(x) => {
+                           print_indent(indent);
+                           println!("BeginSequence");
+                           indent += 1;
+                       },
+                       ASNToken::EndSequence =>  {
+                           indent -= 1;
+                           print_indent(indent);
+                           println!("EndSequence");
+                       },
+                        ASNToken::BeginSet(x) => {
+                            print_indent(indent);
+                            println!("BeginSet");
+                            indent += 1;
+                        },
+                        ASNToken::EndSet =>  {
+                            indent -= 1;
+                            print_indent(indent);
+                            println!("EndSet");
+                        },
+                       ASNToken::GenericTLV(name, contents) => {
+                           print_indent(indent);
+                           println!("{} ({})", name, contents.len())
+                       },
+                    }
+                }
+            }
+
         }
-
-
-
-
-        */
 
 
     }
