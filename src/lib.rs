@@ -1,9 +1,16 @@
 mod rasn {
+    use std::str::Utf8Error;
 
     #[derive(Debug, PartialEq)]
     struct ParseToken<'a, T> {
         value : T,
         remainder: &'a[u8]
+    }
+
+    impl<'a, T> ParseToken<'a, T> {
+        fn new(value: T, remainder: &[u8]) -> ParseToken<T> {
+            ParseToken {value, remainder}
+        }
     }
 
     #[derive(Debug, PartialEq)]
@@ -12,6 +19,11 @@ mod rasn {
     }
 
     impl<'a> IntegerCell<'a> {
+
+        fn new(bytes: &'a[u8]) -> IntegerCell {
+            IntegerCell{bytes}
+        }
+
         fn as_i32(&self) -> Option<i32> {
 
             match self.bytes.len() {
@@ -37,11 +49,14 @@ mod rasn {
         BeginSet(&'a[u8]),                  // the interior data of the set
         EndSet,
         Integer(IntegerCell<'a>),
+        PrintableString(&'a str),
         GenericTLV(&'static str, &'a[u8]),  // any TLV
     }
 
     #[derive(Debug, PartialEq)]
     enum ParseError<'a> {
+        EmptySequence,
+        EmptySet,
         ZeroLengthInteger,
         NonUniversalType(u8),
         UnsupportedUniversalType(u8),
@@ -50,6 +65,7 @@ mod rasn {
         ReservedLengthValue,
         UnsupportedLengthByteCount(u8),
         BadLengthEncoding(u8),
+        BadUTF8(Utf8Error)
     }
 
     type ParseResult<'a, T> = Result<ParseToken<'a, T>, ParseError<'a>>;
@@ -60,91 +76,76 @@ mod rasn {
 
     fn parse_one(input: &[u8]) -> ParseResult<ASNToken> {
 
-        fn parse_seq(input: &[u8]) -> ParseResult<ASNToken> {
-            parse_length(input).and_then(
-                |result|  {
-                    if result.remainder.len() < result.value {
-                        Err(ParseError::InsufficientBytes(result.value, result.remainder))
-                    }
-                    else {
-                        parse_ok(ASNToken::BeginSequence(&result.remainder[0..result.value]), &result.remainder[result.value..])
-                    }
-                }
-            )
+        fn parse_seq(contents: &[u8]) -> Result<ASNToken, ParseError> {
+            if contents.is_empty() {
+                Err(ParseError::EmptySequence)
+            } else {
+                Ok(ASNToken::BeginSequence(contents))
+            }
         }
 
-        fn parse_set(input: &[u8]) -> ParseResult<ASNToken> {
-            parse_length(input).and_then(
-                |result|  {
-                    if result.remainder.len() < result.value {
-                        Err(ParseError::InsufficientBytes(result.value, result.remainder))
-                    }
-                    else {
-                        parse_ok(ASNToken::BeginSet(&result.remainder[0..result.value]), &result.remainder[result.value..])
-                    }
-                }
-            )
+        fn parse_set(contents: &[u8]) -> Result<ASNToken, ParseError> {
+            if contents.is_empty() {
+                Err(ParseError::EmptySequence)
+            } else {
+                Ok(ASNToken::BeginSet(contents))
+            }
         }
 
-        fn parse_integer(input: &[u8]) -> ParseResult<ASNToken> {
-            parse_length(input).and_then(
-                |result|  {
-                    if result.remainder.is_empty() {
-                        Err(ParseError::ZeroLengthInteger)
-                    }
-                    else {
-                        parse_ok(ASNToken::Integer(IntegerCell{bytes: &result.remainder[0..result.value]}), &result.remainder[result.value..])
-                    }
-                }
-            )
+        fn parse_integer(contents: &[u8]) -> Result<ASNToken, ParseError> {
+            if contents.is_empty() {
+                Err(ParseError::ZeroLengthInteger)
+            }
+            else {
+                Ok(ASNToken::Integer(IntegerCell::new(contents)))
+            }
         }
 
-        fn parse_generic_tlv<'a>(name: &'static str, input: &'a[u8]) -> ParseResult<'a, ASNToken<'a>> {
-            parse_length(input).and_then(
-                |result|  {
-                    if result.remainder.len() < result.value {
-                        Err(ParseError::InsufficientBytes(result.value, result.remainder))
-                    }
-                    else {
-                        parse_ok(ASNToken::GenericTLV(name, &result.remainder[0..result.value]), &result.remainder[result.value..])
-                    }
-                }
-            )
+        fn parse_generic_tlv<'a>(name: &'static str, contents: &'a[u8]) -> Result<ASNToken<'a>, ParseError<'a>> {
+           Ok(ASNToken::GenericTLV(name, contents))
         }
 
         if input.len() < 1 {
-            return Err(ParseError::InsufficientBytes(1, input))
+            return Err(ParseError::InsufficientBytes(2, input))
         }
 
-        let typ = input[0];
+        let typ : u8 = input[0];
 
         if typ & 0b11000000 != 0 {
             // non-universal type
             return Err(ParseError::NonUniversalType(typ))
         }
 
-        match typ & 0b00111111 {
+        let length = parse_length(&input[1..])?;
 
-           0x02 => parse_integer(&input[1..]),
-           0x03 => parse_generic_tlv("BitString", &input[1..]),
-           0x04 => parse_generic_tlv("OctetString", &input[1..]),
-           0x05 => parse_generic_tlv("Null", &input[1..]),
-           0x06 => parse_generic_tlv("ObjectIdentifier", &input[1..]),
-           0x0C => parse_generic_tlv("UTF8String", &input[1..]),
-           0x13 => parse_generic_tlv("PrintableString", &input[1..]),
-           0x14 => parse_generic_tlv("T61String", &input[1..]),
-           0x16 => parse_generic_tlv("IA5String", &input[1..]),
-           0x17 => parse_generic_tlv("UTCTime", &input[1..]),
+        if length.value > length.remainder.len() {
+            return Err(ParseError::InsufficientBytes(length.value, length.remainder))
+        }
 
+        let content = &length.remainder[0..length.value];
 
-           0x30 => parse_seq(&input[1..]),
-           0x31 => parse_set(&input[1..]),
+        let result = match typ & 0b00111111 {
 
+           // simple types
+           0x02 => parse_integer(content),
+           0x03 => parse_generic_tlv("BitString", content),
+           0x04 => parse_generic_tlv("OctetString", content),
+           0x05 => parse_generic_tlv("Null", content),
+           0x06 => parse_generic_tlv("ObjectIdentifier", content),
+           0x0C => parse_generic_tlv("UTF8String", content),
+           0x13 => parse_generic_tlv("PrintableString", content),
+           0x14 => parse_generic_tlv("T61String", content),
+           0x16 => parse_generic_tlv("IA5String", content),
+           0x17 => parse_generic_tlv("UTCTime", content),
 
-
+           // structured types
+           0x30 => parse_seq(content),
+           0x31 => parse_set(content),
 
            x => Err(ParseError::UnsupportedUniversalType(x))
-        }
+        };
+
+        result.map(|value| ParseToken::new(value, &length.remainder[length.value..]))
     }
 
     fn parse_length(input: &[u8]) -> ParseResult<usize> {
@@ -182,28 +183,34 @@ mod rasn {
             return Err(ParseError::InsufficientBytes(1, input))
         }
 
-        let top = input[0] & 0b10000000;
-        let count = input[0] & 0b01111111;
+        let top_bit = input[0] & 0b10000000;
+        let count_of_bytes = input[0] & 0b01111111;
 
-        if top == 0 {
-            parse_ok(count as usize, &input[1..])
+        if top_bit == 0 {
+            parse_ok(count_of_bytes as usize, &input[1..])
         }
         else {
 
-            let remainder = &input[1..];
-
-            if remainder.len() < count as usize {
-                return Err(ParseError::InsufficientBytes(count as usize, remainder))
+            if count_of_bytes == 0 {
+                return Err(ParseError::UnsupportedIndefiniteLength);
             }
 
-            match count {
-                0 => Err(ParseError::UnsupportedIndefiniteLength),
+            if count_of_bytes == 127 {
+                return Err(ParseError::ReservedLengthValue)
+            }
+
+            let remainder = &input[1..];
+
+            if remainder.len() < count_of_bytes as usize {
+                return Err(ParseError::InsufficientBytes(count_of_bytes as usize, remainder))
+            }
+
+            match count_of_bytes {
                 1 => decode_one(remainder),
                 2 => decode_two(remainder),
                 3 => decode_three(remainder),
                 4 => decode_four(remainder),
-                127 => Err(ParseError::ReservedLengthValue),
-                _ => Err(ParseError::UnsupportedLengthByteCount(count))
+                _ => Err(ParseError::UnsupportedLengthByteCount(count_of_bytes))
             }
         }
     }
@@ -348,7 +355,7 @@ mod rasn {
 
         #[test]
         fn parse_one_fails_for_unknown_universal_type() {
-            assert_eq!(parse_one(&[0x3F]), Err(ParseError::UnsupportedUniversalType(0x3F)))
+            assert_eq!(parse_one(&[0x3F, 0x00]), Err(ParseError::UnsupportedUniversalType(0x3F)))
         }
 
         #[test]
@@ -420,22 +427,22 @@ mod rasn {
                            print_indent(indent);
                            println!("BeginSequence");
                            indent += 1;
-                       },
+                       }
                        ASNToken::EndSequence =>  {
                            indent -= 1;
                            print_indent(indent);
                            println!("EndSequence");
-                       },
+                       }
                         ASNToken::BeginSet(_) => {
                             print_indent(indent);
                             println!("BeginSet");
                             indent += 1;
-                        },
+                        }
                         ASNToken::EndSet =>  {
                             indent -= 1;
                             print_indent(indent);
                             println!("EndSet");
-                        },
+                        }
                         ASNToken::Integer(cell) => {
                             print_indent(indent);
                             match cell.as_i32() {
@@ -444,9 +451,14 @@ mod rasn {
                             }
 
                         }
+                        ASNToken::PrintableString(value) => {
+                            print_indent(indent);
+                            println!("PrintableString: {}", value);
+
+                        }
                         ASNToken::GenericTLV(name, contents) => {
                            print_indent(indent);
-                           println!("{} ({})", name, contents.len())
+                           println!("{} ({})", name, contents.len());
                         },
                     }
                 }
