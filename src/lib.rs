@@ -7,16 +7,42 @@ mod rasn {
     }
 
     #[derive(Debug, PartialEq)]
+    pub struct IntegerCell<'a> {
+        bytes: &'a[u8]
+    }
+
+    impl<'a> IntegerCell<'a> {
+        fn as_i32(&self) -> Option<i32> {
+
+            match self.bytes.len() {
+                1 => Some(self.bytes[0] as i32),
+                2 => Some(
+                    ((self.bytes[0] as i32) << 8) | (self.bytes[1] as i32)
+                ),
+                3 => Some(
+                    ((self.bytes[0] as i32) << 16) | ((self.bytes[1] as i32) << 8) | (self.bytes[2] as i32)
+                ),
+                4 => Some(
+                    ((self.bytes[0] as i32) << 24) | ((self.bytes[1] as i32) << 16) | ((self.bytes[2] as i32) << 8) | (self.bytes[3] as i32)
+                ),
+                _ => None
+            }
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
     enum ASNToken<'a> {
         BeginSequence(&'a[u8]),             // the interior data of the sequence
         EndSequence,
         BeginSet(&'a[u8]),                  // the interior data of the set
         EndSet,
-        GenericTLV(&'static str, &'a[u8])   // any TLV
+        Integer(IntegerCell<'a>),
+        GenericTLV(&'static str, &'a[u8]),  // any TLV
     }
 
     #[derive(Debug, PartialEq)]
     enum ParseError<'a> {
+        ZeroLengthInteger,
         NonUniversalType(u8),
         UnsupportedUniversalType(u8),
         InsufficientBytes(usize, &'a[u8]), // the required length and the actual remaining bytes
@@ -60,6 +86,19 @@ mod rasn {
             )
         }
 
+        fn parse_integer(input: &[u8]) -> ParseResult<ASNToken> {
+            parse_length(input).and_then(
+                |result|  {
+                    if result.remainder.is_empty() {
+                        Err(ParseError::ZeroLengthInteger)
+                    }
+                    else {
+                        parse_ok(ASNToken::Integer(IntegerCell{bytes: &result.remainder[0..result.value]}), &result.remainder[result.value..])
+                    }
+                }
+            )
+        }
+
         fn parse_generic_tlv<'a>(name: &'static str, input: &'a[u8]) -> ParseResult<'a, ASNToken<'a>> {
             parse_length(input).and_then(
                 |result|  {
@@ -86,7 +125,7 @@ mod rasn {
 
         match typ & 0b00111111 {
 
-           0x02 => parse_generic_tlv("Integer", &input[1..]),
+           0x02 => parse_integer(&input[1..]),
            0x03 => parse_generic_tlv("BitString", &input[1..]),
            0x04 => parse_generic_tlv("OctetString", &input[1..]),
            0x05 => parse_generic_tlv("Null", &input[1..]),
@@ -397,10 +436,18 @@ mod rasn {
                             print_indent(indent);
                             println!("EndSet");
                         },
-                       ASNToken::GenericTLV(name, contents) => {
+                        ASNToken::Integer(cell) => {
+                            print_indent(indent);
+                            match cell.as_i32() {
+                                Some(x) => println!("Integer: {}", x),
+                                None => println!("Integer: {:?}", cell.bytes),
+                            }
+
+                        }
+                        ASNToken::GenericTLV(name, contents) => {
                            print_indent(indent);
                            println!("{} ({})", name, contents.len())
-                       },
+                        },
                     }
                 }
             }
