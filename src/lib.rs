@@ -20,8 +20,10 @@ mod rasn {
         NonUniversalType(u8),
         UnsupportedUniversalType(u8),
         InsufficientBytes(usize, &'a[u8]), // the required length and the actual remaining bytes
+        UnsupportedIndefiniteLength,
+        ReservedLengthValue,
         UnsupportedLengthByteCount(u8),
-        BadLengthEncoding(u8)
+        BadLengthEncoding(u8),
     }
 
     type ParseResult<'a, T> = Result<ParseToken<'a, T>, ParseError<'a>>;
@@ -110,11 +112,16 @@ mod rasn {
 
         fn decode_one(input: &[u8]) -> ParseResult<usize> {
             let value = input[0];
-            if value < 128 {
-                Err(ParseError::BadLengthEncoding(value)) // should have been encoded in single byte
-            } else {
-                parse_ok(value as usize, &input[1..])
+
+            if value == 0 {
+                return Err(ParseError::UnsupportedIndefiniteLength)
             }
+
+            if value < 128 {
+                return Err(ParseError::BadLengthEncoding(value)) // should have been encoded in single byte
+            }
+
+            parse_ok(value as usize, &input[1..])
         }
 
         fn decode_two(input: &[u8]) -> ParseResult<usize> {
@@ -151,10 +158,12 @@ mod rasn {
             }
 
             match count {
+                0 => Err(ParseError::UnsupportedIndefiniteLength),
                 1 => decode_one(remainder),
                 2 => decode_two(remainder),
                 3 => decode_three(remainder),
                 4 => decode_four(remainder),
+                127 => Err(ParseError::ReservedLengthValue),
                 _ => Err(ParseError::UnsupportedLengthByteCount(count))
             }
         }
@@ -249,6 +258,16 @@ mod rasn {
         }
 
         #[test]
+        fn detects_indefinite_length() {
+            assert_eq!(parse_length(&[0x80]), Err(ParseError::UnsupportedIndefiniteLength))
+        }
+
+        #[test]
+        fn detects_reserved_length_of_127() {
+            assert_eq!(parse_length(&[0xFF]), Err(ParseError::ReservedLengthValue))
+        }
+
+        #[test]
         fn decode_length_on_single_byte_returns_valid_result() {
             assert_eq!(parse_length(&[127, 0xDE, 0xAD]), parse_ok(127, &[0xDE, 0xAD]))
         }
@@ -340,6 +359,7 @@ mod rasn {
             0x1e, 0x7f, 0x86, 0x9b, 0x16, 0x40
         ];
 
+
         #[test]
         fn iterates_over_x509() {
 
@@ -348,7 +368,7 @@ mod rasn {
             let parser = Parser::new(&CERT_DATA);
 
             fn print_indent(indent: usize) {
-                for i in 0..indent {
+                for _ in 0..indent {
                     print!("    ");
                 }
             }
@@ -357,7 +377,7 @@ mod rasn {
                 match result {
                     Err(x) => println!("{:?}", x),
                     Ok(token) => match token.value {
-                       ASNToken::BeginSequence(x) => {
+                       ASNToken::BeginSequence(_) => {
                            print_indent(indent);
                            println!("BeginSequence");
                            indent += 1;
@@ -367,7 +387,7 @@ mod rasn {
                            print_indent(indent);
                            println!("EndSequence");
                        },
-                        ASNToken::BeginSet(x) => {
+                        ASNToken::BeginSet(_) => {
                             print_indent(indent);
                             println!("BeginSet");
                             indent += 1;
