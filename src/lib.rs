@@ -128,26 +128,25 @@ mod rasn {
             fn parse_one(content: &[u8]) -> ParseResult<u32> {
                 let mut sum : u32 = 0;
                 let mut count: u32 = 0;
-                let mut current = content;
+                let mut cursor = content;
 
                 loop {
 
+                    // only allow 4*7 = 28 bits so that we don't overflow u32
                     if count > 3 { return Err(ParseError::BadOidLength) };
-                    if current.is_empty() { return Err(InsufficientBytes(1, current)) }
+                    if cursor.is_empty() { return Err(InsufficientBytes(1, cursor)) }
 
-
-                    let has_next : bool = (current[0] & 0b10000000) != 0;
-                    let value : u32 = (current[0] & 0b01111111) as u32;
-
+                    let has_next : bool = (cursor[0] & 0b10000000) != 0;
+                    let value : u32 = (cursor[0] & 0b01111111) as u32;
 
                     sum <<= 7;
                     sum += value;
-                    
+
                     count += 1;
-                    current = &current[1..];
+                    cursor = &cursor[1..];
 
                     if !has_next {
-                        return Ok(ParseToken::new(sum, &current))
+                        return Ok(ParseToken::new(sum, &cursor))
                     }
                 }
             }
