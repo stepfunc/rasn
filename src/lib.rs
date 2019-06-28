@@ -1,7 +1,10 @@
+extern crate chrono;
+
 mod rasn {
 
+    use chrono;
     use std::str;
-    use rasn::ParseError::InsufficientBytes;
+    use chrono::{DateTime, FixedOffset};
 
     #[derive(Debug, PartialEq)]
     struct ParseToken<'a, T> {
@@ -53,12 +56,13 @@ mod rasn {
         IA5String(&'a str),
         UTF8String(&'a str),
         Null,
+        UTCTime(chrono::DateTime<chrono::FixedOffset>),
         GenericTLV(&'static str, &'a[u8]),  // any TLV
         ObjectIdentifier(Vec<u32>)
     }
 
     #[derive(Debug, PartialEq)]
-    enum ParseError<'a> {
+    enum ASNError<'a> {
         EmptySequence,
         EmptySet,
         ZeroLengthInteger,
@@ -71,59 +75,95 @@ mod rasn {
         UnsupportedLengthByteCount(u8),
         BadLengthEncoding(u8),
         BadOidLength,
-        BadUTF8(str::Utf8Error)
+        BadUTF8(str::Utf8Error),
+        BadUTCTime(chrono::format::ParseError, &'a str)
     }
 
-    type ParseResult<'a, T> = Result<ParseToken<'a, T>, ParseError<'a>>;
+    type ParseResult<'a, T> = Result<ParseToken<'a, T>, ASNError<'a>>;
 
     fn parse_ok<T>(value : T,  remainder: &[u8]) -> ParseResult<T> {
         Ok(ParseToken { value, remainder })
     }
 
-    fn parse_seq(content: &[u8]) -> Result<ASNType, ParseError> {
+    fn parse_seq(content: &[u8]) -> Result<ASNType, ASNError> {
         if content.is_empty() {
-            Err(ParseError::EmptySequence)
+            Err(ASNError::EmptySequence)
         } else {
             Ok(ASNType::Sequence(content))
         }
     }
 
-    fn parse_set(content: &[u8]) -> Result<ASNType, ParseError> {
+    fn parse_set(content: &[u8]) -> Result<ASNType, ASNError> {
         if content.is_empty() {
-            Err(ParseError::EmptySet)
+            Err(ASNError::EmptySet)
         } else {
             Ok(ASNType::Set(content))
         }
     }
 
-    fn parse_null(content: &[u8]) -> Result<ASNType, ParseError> {
+    fn parse_null(content: &[u8]) -> Result<ASNType, ASNError> {
         if content.is_empty() {
             Ok(ASNType::Null)
         }
         else {
-            Err(ParseError::NullWithNonEmptyContents(content))
+            Err(ASNError::NullWithNonEmptyContents(content))
         }
     }
 
-    fn parse_integer(content: &[u8]) -> Result<ASNType, ParseError> {
+    fn parse_integer(content: &[u8]) -> Result<ASNType, ASNError> {
         if content.is_empty() {
-            Err(ParseError::ZeroLengthInteger)
+            Err(ASNError::ZeroLengthInteger)
         }
         else {
             Ok(ASNType::Integer(IntegerCell::new(content)))
         }
     }
 
-    fn parse_string<T : Fn(&str) -> ASNType>(content: &[u8], create: T) -> Result<ASNType, ParseError> {
+    fn parse_utc_time(content: &[u8]) -> Result<ASNType, ASNError> {
+
+        fn try_parse_utc_variants(s: &str) -> Result<chrono::DateTime<FixedOffset>, chrono::ParseError> {
+
+            let utc_with_seconds = "%y%m%d%H%M%SZ";
+            let utc_without_seconds = "%y%m%d%H%MZ";
+
+            // try the explicitly UTC variant
+            chrono::NaiveDateTime::parse_from_str(s,utc_with_seconds)
+                .or_else(|err|  chrono::NaiveDateTime::parse_from_str(s, utc_without_seconds))
+                .map(|t| DateTime::from_utc(t, FixedOffset::east(0)))
+        }
+
+        fn try_parse_tz_variants(s: &str) -> Result<chrono::DateTime<FixedOffset>, chrono::ParseError> {
+
+            let tz_with_seconds = "%y%m%d%H%M%S%z";
+            let tz_without_seconds = "%y%m%d%H%M%z";
+
+            chrono::DateTime::parse_from_str(s,tz_with_seconds)
+                .or_else(|_|  chrono::DateTime::parse_from_str(s, tz_without_seconds))
+        }
+
+        fn try_parse_all_variants(s: &str) -> Result<chrono::DateTime<FixedOffset>, chrono::ParseError> {
+            try_parse_utc_variants(s).or_else(|_| try_parse_tz_variants(s))
+        }
+
         match str::from_utf8(content) {
-            Ok(x) => Ok(create(x)),
-            Err(x) => Err(ParseError::BadUTF8(x))
+            Ok(s) => match try_parse_all_variants(s){
+                Ok(time) => Ok(ASNType::UTCTime(time)),
+                Err(err) => Err(ASNError::BadUTCTime(err, s))
+            }
+            Err(x) => Err(ASNError::BadUTF8(x))
         }
     }
 
-    fn parse_object_identifier(content: &[u8]) -> Result<ASNType, ParseError> {
+    fn parse_string<T : Fn(&str) -> ASNType>(content: &[u8], create: T) -> Result<ASNType, ASNError> {
+        match str::from_utf8(content) {
+            Ok(x) => Ok(create(x)),
+            Err(x) => Err(ASNError::BadUTF8(x))
+        }
+    }
 
-        fn parse_remainder<'a>(content: &'a[u8], items: &mut Vec<u32>) -> Result<(), ParseError<'a>> {
+    fn parse_object_identifier(content: &[u8]) -> Result<ASNType, ASNError> {
+
+        fn parse_remainder<'a>(content: &'a[u8], items: &mut Vec<u32>) -> Result<(), ASNError<'a>> {
 
             fn parse_one(content: &[u8]) -> ParseResult<u32> {
                 let mut sum : u32 = 0;
@@ -133,8 +173,8 @@ mod rasn {
                 loop {
 
                     // only allow 4*7 = 28 bits so that we don't overflow u32
-                    if count > 3 { return Err(ParseError::BadOidLength) };
-                    if cursor.is_empty() { return Err(InsufficientBytes(1, cursor)) }
+                    if count > 3 { return Err(ASNError::BadOidLength) };
+                    if cursor.is_empty() { return Err(ASNError::InsufficientBytes(1, cursor)) }
 
                     let has_next : bool = (cursor[0] & 0b10000000) != 0;
                     let value : u32 = (cursor[0] & 0b01111111) as u32;
@@ -169,7 +209,7 @@ mod rasn {
         }
 
         if content.is_empty() {
-            return Err(ParseError::InsufficientBytes(1, content))
+            return Err(ASNError::InsufficientBytes(1, content))
         }
 
         let first = content[0] / 40;
@@ -191,11 +231,11 @@ mod rasn {
             let value = input[0];
 
             if value == 0 {
-                return Err(ParseError::UnsupportedIndefiniteLength)
+                return Err(ASNError::UnsupportedIndefiniteLength)
             }
 
             if value < 128 {
-                return Err(ParseError::BadLengthEncoding(value)) // should have been encoded in single byte
+                return Err(ASNError::BadLengthEncoding(value)) // should have been encoded in single byte
             }
 
             parse_ok(value as usize, &input[1..])
@@ -217,7 +257,7 @@ mod rasn {
         }
 
         if input.len() < 1 {
-            return Err(ParseError::InsufficientBytes(1, input))
+            return Err(ASNError::InsufficientBytes(1, input))
         }
 
         let top_bit = input[0] & 0b10000000;
@@ -229,17 +269,17 @@ mod rasn {
         else {
 
             if count_of_bytes == 0 {
-                return Err(ParseError::UnsupportedIndefiniteLength);
+                return Err(ASNError::UnsupportedIndefiniteLength);
             }
 
             if count_of_bytes == 127 {
-                return Err(ParseError::ReservedLengthValue)
+                return Err(ASNError::ReservedLengthValue)
             }
 
             let remainder = &input[1..];
 
             if remainder.len() < count_of_bytes as usize {
-                return Err(ParseError::InsufficientBytes(count_of_bytes as usize, remainder))
+                return Err(ASNError::InsufficientBytes(count_of_bytes as usize, remainder))
             }
 
             match count_of_bytes {
@@ -247,7 +287,7 @@ mod rasn {
                 2 => decode_two(remainder),
                 3 => decode_three(remainder),
                 4 => decode_four(remainder),
-                _ => Err(ParseError::UnsupportedLengthByteCount(count_of_bytes))
+                _ => Err(ASNError::UnsupportedLengthByteCount(count_of_bytes))
             }
         }
     }
@@ -255,20 +295,20 @@ mod rasn {
     fn parse_one_type(input: &[u8]) -> ParseResult<ASNType> {
 
         if input.len() < 1 {
-            return Err(ParseError::InsufficientBytes(2, input))
+            return Err(ASNError::InsufficientBytes(2, input))
         }
 
         let typ : u8 = input[0];
 
         if typ & 0b11000000 != 0 {
             // non-universal type
-            return Err(ParseError::NonUniversalType(typ))
+            return Err(ASNError::NonUniversalType(typ))
         }
 
         let length = parse_length(&input[1..])?;
 
         if length.value > length.remainder.len() {
-            return Err(ParseError::InsufficientBytes(length.value, length.remainder))
+            return Err(ASNError::InsufficientBytes(length.value, length.remainder))
         }
 
         let content = &length.remainder[0..length.value];
@@ -283,15 +323,14 @@ mod rasn {
            0x06 => parse_object_identifier(content),
            0x0C => parse_string(content, |s| ASNType::UTF8String(s)),
            0x13 => parse_string(content, |s| ASNType::PrintableString(s)),
-           //0x14 => Ok(ASNToken::GenericTLV("T61String", content)),
            0x16 => parse_string(content, |s| ASNType::IA5String(s)),
-           0x17 => Ok(ASNType::GenericTLV("UTCTime", content)),
+           0x17 => parse_utc_time(content),
 
            // structured types
            0x30 => parse_seq(content),
            0x31 => parse_set(content),
 
-           x => Err(ParseError::UnsupportedUniversalType(x))
+           x => Err(ASNError::UnsupportedUniversalType(x))
         };
 
         result.map(|value| ParseToken::new(value, &length.remainder[length.value..]))
@@ -310,7 +349,7 @@ mod rasn {
 
     impl<'a> Iterator for Parser<'a> {
 
-        type Item = Result<ASNType<'a>, ParseError<'a>>;
+        type Item = Result<ASNType<'a>, ASNError<'a>>;
 
 
         fn next(&mut self) -> Option<Self::Item> {
@@ -336,10 +375,10 @@ mod rasn {
         fn begin_constructed(&mut self) -> ();
         fn end_constructed(&mut self) -> ();
         fn on_type(&mut self, asn: &ASNType) -> ();
-        fn on_error(&mut self, err: &ParseError) -> ();
+        fn on_error(&mut self, err: &ASNError) -> ();
     }
 
-    fn parse_all<'a, T : ParseHandler>(input: &'a[u8], handler: &mut T) -> Result<(), ParseError<'a>> {
+    fn parse_all<'a, T : ParseHandler>(input: &'a[u8], handler: &mut T) -> Result<(), ASNError<'a>> {
         for result in Parser::new(input) {
             match result {
                 Err(err) => {
@@ -377,17 +416,17 @@ mod rasn {
 
         #[test]
         fn decode_length_on_empty_bytes_fails() {
-            assert_eq!(parse_length(&[]), Err(ParseError::InsufficientBytes(1, &[])))
+            assert_eq!(parse_length(&[]), Err(ASNError::InsufficientBytes(1, &[])))
         }
 
         #[test]
         fn detects_indefinite_length() {
-            assert_eq!(parse_length(&[0x80]), Err(ParseError::UnsupportedIndefiniteLength))
+            assert_eq!(parse_length(&[0x80]), Err(ASNError::UnsupportedIndefiniteLength))
         }
 
         #[test]
         fn detects_reserved_length_of_127() {
-            assert_eq!(parse_length(&[0xFF]), Err(ParseError::ReservedLengthValue))
+            assert_eq!(parse_length(&[0xFF]), Err(ASNError::ReservedLengthValue))
         }
 
         #[test]
@@ -397,7 +436,7 @@ mod rasn {
 
         #[test]
         fn decode_length_on_count_of_one_returns_none_if_value_less_than_128() {
-            assert_eq!(parse_length(&[TOP_BIT | 1, 127]), Err(ParseError::BadLengthEncoding(127)))
+            assert_eq!(parse_length(&[TOP_BIT | 1, 127]), Err(ASNError::BadLengthEncoding(127)))
         }
 
         #[test]
@@ -422,17 +461,17 @@ mod rasn {
 
         #[test]
         fn decode_length_on_count_of_five_fails() {
-            assert_eq!(parse_length(&[TOP_BIT | 5, 0x01, 0x02, 0x03, 0x04, 0x05]), Err(ParseError::UnsupportedLengthByteCount(5)))
+            assert_eq!(parse_length(&[TOP_BIT | 5, 0x01, 0x02, 0x03, 0x04, 0x05]), Err(ASNError::UnsupportedLengthByteCount(5)))
         }
 
         #[test]
         fn parse_one_fails_for_non_universal_type() {
-            assert_eq!(parse_one_type(&[0xFF]), Err(ParseError::NonUniversalType(0xFF)))
+            assert_eq!(parse_one_type(&[0xFF]), Err(ASNError::NonUniversalType(0xFF)))
         }
 
         #[test]
         fn parse_one_fails_for_unknown_universal_type() {
-            assert_eq!(parse_one_type(&[0x3F, 0x00]), Err(ParseError::UnsupportedUniversalType(0x3F)))
+            assert_eq!(parse_one_type(&[0x3F, 0x00]), Err(ASNError::UnsupportedUniversalType(0x3F)))
         }
 
         #[test]
@@ -442,7 +481,40 @@ mod rasn {
 
         #[test]
         fn parse_sequence_fails_if_insufficient_bytes() {
-            assert_eq!(parse_one_type(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ParseError::InsufficientBytes(0x0F, &[0xDE, 0xAD])));
+            assert_eq!(parse_one_type(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ASNError::InsufficientBytes(0x0F, &[0xDE, 0xAD])));
+        }
+
+        #[test]
+        fn parses_utc_time() {
+
+            let utc_with_seconds = "990102052345Z";
+            let utc_without_seconds = "9901020523Z";
+            let tz_positive_with_seconds = "990102052345+0000";
+            let tz_positive_without_seconds = "9901020523+0000";
+            let tz_negative_with_seconds = "990102052345-0000";
+            let tz_negative_without_seconds = "9901020523-0000";
+
+            fn test_variant(value: &str, seconds: u32) {
+                assert_eq!(
+                    parse_utc_time(value.as_bytes()),
+                    Ok(ASNType::UTCTime(
+                        chrono::DateTime::from_utc(
+                            chrono::NaiveDate::from_ymd(1999, 01, 02).and_hms(5, 23, seconds),
+                            chrono::FixedOffset::east(0)
+                        )
+                    ))
+                );
+            }
+
+            // parses the explicit timezone version
+            test_variant(utc_with_seconds, 45);
+            test_variant(utc_without_seconds, 00);
+
+            test_variant(tz_positive_with_seconds, 45);
+            test_variant(tz_positive_without_seconds, 00);
+
+            test_variant(tz_negative_with_seconds, 45);
+            test_variant(tz_negative_without_seconds, 00);
         }
 
         #[test]
@@ -503,13 +575,16 @@ mod rasn {
                     ASNType::ObjectIdentifier(items) => {
                         println!("ObjectIdentifier: {:?}", items);
                     }
+                    ASNType::UTCTime(value) => {
+                        println!("UTCTime: {}", value);
+                    }
                     ASNType::GenericTLV(name, contents) => {
                         println!("{} ({})", name, contents.len())
                     }
                 }
             }
 
-            fn on_error(&mut self, err: &ParseError) -> () {
+            fn on_error(&mut self, err: &ASNError) -> () {
                 println!("Error: {:?}", err);
             }
         }
