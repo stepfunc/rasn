@@ -82,6 +82,66 @@ mod rasn {
         Ok(ParseToken { value, remainder })
     }
 
+    fn parse_object_identifier(content: &[u8]) -> Result<ASNToken, ParseError> {
+
+        fn parse_remainder(content: &[u8]) -> Result<Vec<u32>, ParseError> {
+
+            fn parse_one(content: &[u8]) -> ParseResult<u32> {
+                let mut sum : u32 = 0;
+                let mut shift: u32  = 0;
+                let mut count: u32 = 0;
+                let mut current = content;
+
+                loop {
+                    sum <<= shift;
+
+                    let has_next : bool = (current[0] & 0b10000000) != 0;
+                    let value : u32 = (current[0] & 0b01111111) as u32;
+
+                    if current.is_empty() { return Err(InsufficientBytes(1, current)) }
+                    if count > 4 { return Err(ParseError::BadOidLength) };
+
+                    sum += value;
+                    count += 1;
+                    shift += 7;
+                    current = &current[1..];
+
+                    if !has_next {
+                        return Ok(ParseToken::new(sum, &current))
+                    }
+                }
+            }
+
+            let mut vec = Vec::new();
+            let mut current = content;
+
+            while !current.is_empty() {
+                match parse_one(current) {
+                    Ok(ParseToken { value, remainder }) => {
+                        vec.push(value);
+                        current = remainder;
+                    },
+                    Err(err) => {
+                        return Err(err)
+                    }
+                }
+            }
+
+            Ok(vec)
+        }
+
+        if content.is_empty() {
+            return Err(ParseError::InsufficientBytes(1, content))
+        }
+
+        let first = content[0] / 40;
+        let second = content[0] % 40;
+
+        let remainder = parse_remainder(&content[1..])?;
+
+        Ok(ASNToken::ObjectIdentifier(first, second, remainder))
+    }
+
     fn parse_one(input: &[u8]) -> ParseResult<ASNToken> {
 
         fn parse_seq(content: &[u8]) -> Result<ASNToken, ParseError> {
@@ -116,66 +176,6 @@ mod rasn {
             else {
                 Ok(ASNToken::Integer(IntegerCell::new(content)))
             }
-        }
-
-        fn parse_object_identifier(content: &[u8]) -> Result<ASNToken, ParseError> {
-
-            fn parse_remainder(content: &[u8]) -> Result<Vec<u32>, ParseError> {
-
-                fn parse_one(content: &[u8]) -> ParseResult<u32> {
-                    let mut sum : u32 = 0;
-                    let mut multipler  = 1;
-                    let mut count = 0;
-                    let mut current = content;
-
-                    loop {
-                        let has_next : bool = (current[0] & 0b10000000) != 0;
-                        let value : u32 = (current[0] & 0b01111111) as u32;
-
-                        if current.is_empty() { return Err(InsufficientBytes(1, current)) }
-                        if count > 4 { return Err(ParseError::BadOidLength) };
-
-                        sum += value * multipler;
-
-                        count += 1;
-                        current = &current[1..];
-
-                        if !has_next {
-                            return Ok(ParseToken::new(sum, &current))
-                        }
-
-                        multipler *= 128;
-                    }
-                }
-
-                let mut vec = Vec::new();
-                let mut current = content;
-
-                while !current.is_empty() {
-                    match parse_one(current) {
-                        Ok(ParseToken { value, remainder }) => {
-                            vec.push(value);
-                            current = remainder;
-                        },
-                        Err(err) => {
-                            return Err(err)
-                        }
-                    }
-                }
-
-                Ok(vec)
-            }
-
-            if content.is_empty() {
-                return Err(ParseError::InsufficientBytes(1, content))
-            }
-
-            let first = content[0] / 40;
-            let second = content[0] % 40;
-
-            let remainder = parse_remainder(&content[1..])?;
-
-            Ok(ASNToken::ObjectIdentifier(first, second, remainder))
         }
 
         fn parse_string<T : Fn(&str) -> ASNToken>(content: &[u8], create: T) -> Result<ASNToken, ParseError> {
@@ -447,6 +447,16 @@ mod rasn {
         fn parse_sequence_fails_if_insufficient_bytes() {
             assert_eq!(parse_one(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ParseError::InsufficientBytes(0x0F, &[0xDE, 0xAD])))
         }
+
+        #[test]
+        fn parse_known_object_identifiers() {
+            assert_eq!(
+                parse_object_identifier(&[0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x15, 0x14]),
+                Ok(ASNToken::ObjectIdentifier(1, 3, [6,1,4,1,311,21,20].to_vec()))
+            )
+        }
+
+
 
         const CERT_DATA : [u8; 534] = [
             0x30, 0x82, 0x02, 0x12, 0x30, 0x82, 0x01, 0x7b, 0x02, 0x02, 0x0d, 0xfa, 0x30, 0x0d, 0x06, 0x09,
