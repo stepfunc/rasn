@@ -1,6 +1,7 @@
 mod rasn {
 
     use std::str;
+    use rasn::ParseError::InsufficientBytes;
 
     #[derive(Debug, PartialEq)]
     struct ParseToken<'a, T> {
@@ -55,7 +56,7 @@ mod rasn {
         UTF8String(&'a str),
         Null,
         GenericTLV(&'static str, &'a[u8]),  // any TLV
-        ObjectIdentifier(Vec<u32>)
+        ObjectIdentifier(u8, u8, Vec<u32>)
     }
 
     #[derive(Debug, PartialEq)]
@@ -71,6 +72,7 @@ mod rasn {
         ReservedLengthValue,
         UnsupportedLengthByteCount(u8),
         BadLengthEncoding(u8),
+        BadOidLength,
         BadUTF8(str::Utf8Error)
     }
 
@@ -117,7 +119,63 @@ mod rasn {
         }
 
         fn parse_object_identifier(content: &[u8]) -> Result<ASNToken, ParseError> {
-            Ok(ASNToken::ObjectIdentifier(vec![1, 2, 840, 113549]))
+
+            fn parse_remainder(content: &[u8]) -> Result<Vec<u32>, ParseError> {
+
+                fn parse_one(content: &[u8]) -> ParseResult<u32> {
+                    let mut sum : u32 = 0;
+                    let mut multipler  = 1;
+                    let mut count = 0;
+                    let mut current = content;
+
+                    loop {
+                        let has_next : bool = (current[0] & 0b10000000) != 0;
+                        let value : u32 = (current[0] & 0b01111111) as u32;
+
+                        if current.is_empty() { return Err(InsufficientBytes(1, current)) }
+                        if count > 4 { return Err(ParseError::BadOidLength) };
+
+                        sum += value * multipler;
+
+                        count += 1;
+                        current = &current[1..];
+
+                        if !has_next {
+                            return Ok(ParseToken::new(sum, &current))
+                        }
+
+                        multipler *= 128;
+                    }
+                }
+
+                let mut vec = Vec::new();
+                let mut current = content;
+
+                while !current.is_empty() {
+                    match parse_one(current) {
+                        Ok(ParseToken { value, remainder }) => {
+                            vec.push(value);
+                            current = remainder;
+                        },
+                        Err(err) => {
+                            return Err(err)
+                        }
+                    }
+                }
+
+                Ok(vec)
+            }
+
+            if content.is_empty() {
+                return Err(ParseError::InsufficientBytes(1, content))
+            }
+
+            let first = content[0] / 40;
+            let second = content[0] % 40;
+
+            let remainder = parse_remainder(&content[1..])?;
+
+            Ok(ASNToken::ObjectIdentifier(first, second, remainder))
         }
 
         fn parse_string<T : Fn(&str) -> ASNToken>(content: &[u8], create: T) -> Result<ASNToken, ParseError> {
@@ -488,9 +546,9 @@ mod rasn {
                             println!("UTF8String: {}", value);
 
                         }
-                        ASNToken::ObjectIdentifier(ids) => {
+                        ASNToken::ObjectIdentifier(first, second, ids) => {
                             print_indent(indent);
-                            println!("ObjectIdentifier: {:?}", ids);
+                            println!("ObjectIdentifier: {} {} {:?}", first, second, ids);
 
                         }
                         ASNToken::Null => {
