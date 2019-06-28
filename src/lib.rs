@@ -45,18 +45,16 @@ mod rasn {
     }
 
     #[derive(Debug, PartialEq)]
-    enum ASNToken<'a> {
-        BeginSequence(&'a[u8]),             // the interior data of the sequence
-        EndSequence,
-        BeginSet(&'a[u8]),                  // the interior data of the set
-        EndSet,
+    enum ASNType<'a> {
+        Sequence(&'a[u8]),             // the interior data of the sequence
+        Set(&'a[u8]),                  // the interior data of the set
         Integer(IntegerCell<'a>),
         PrintableString(&'a str),
         IA5String(&'a str),
         UTF8String(&'a str),
         Null,
         GenericTLV(&'static str, &'a[u8]),  // any TLV
-        ObjectIdentifier(u8, u8, Vec<u32>)
+        ObjectIdentifier(Vec<u32>)
     }
 
     #[derive(Debug, PartialEq)]
@@ -82,9 +80,50 @@ mod rasn {
         Ok(ParseToken { value, remainder })
     }
 
-    fn parse_object_identifier(content: &[u8]) -> Result<ASNToken, ParseError> {
+    fn parse_seq(content: &[u8]) -> Result<ASNType, ParseError> {
+        if content.is_empty() {
+            Err(ParseError::EmptySequence)
+        } else {
+            Ok(ASNType::Sequence(content))
+        }
+    }
 
-        fn parse_remainder(content: &[u8]) -> Result<Vec<u32>, ParseError> {
+    fn parse_set(content: &[u8]) -> Result<ASNType, ParseError> {
+        if content.is_empty() {
+            Err(ParseError::EmptySet)
+        } else {
+            Ok(ASNType::Set(content))
+        }
+    }
+
+    fn parse_null(content: &[u8]) -> Result<ASNType, ParseError> {
+        if content.is_empty() {
+            Ok(ASNType::Null)
+        }
+        else {
+            Err(ParseError::NullWithNonEmptyContents(content))
+        }
+    }
+
+    fn parse_integer(content: &[u8]) -> Result<ASNType, ParseError> {
+        if content.is_empty() {
+            Err(ParseError::ZeroLengthInteger)
+        }
+        else {
+            Ok(ASNType::Integer(IntegerCell::new(content)))
+        }
+    }
+
+    fn parse_string<T : Fn(&str) -> ASNType>(content: &[u8], create: T) -> Result<ASNType, ParseError> {
+        match str::from_utf8(content) {
+            Ok(x) => Ok(create(x)),
+            Err(x) => Err(ParseError::BadUTF8(x))
+        }
+    }
+
+    fn parse_object_identifier(content: &[u8]) -> Result<ASNType, ParseError> {
+
+        fn parse_remainder<'a>(content: &'a[u8], items: &mut Vec<u32>) -> Result<(), ParseError<'a>> {
 
             fn parse_one(content: &[u8]) -> ParseResult<u32> {
                 let mut sum : u32 = 0;
@@ -112,13 +151,12 @@ mod rasn {
                 }
             }
 
-            let mut vec = Vec::new();
             let mut current = content;
 
             while !current.is_empty() {
                 match parse_one(current) {
                     Ok(ParseToken { value, remainder }) => {
-                        vec.push(value);
+                        items.push(value);
                         current = remainder;
                     },
                     Err(err) => {
@@ -127,7 +165,7 @@ mod rasn {
                 }
             }
 
-            Ok(vec)
+            Ok(())
         }
 
         if content.is_empty() {
@@ -137,95 +175,14 @@ mod rasn {
         let first = content[0] / 40;
         let second = content[0] % 40;
 
-        let remainder = parse_remainder(&content[1..])?;
+        let mut items : Vec<u32> = Vec::new();
 
-        Ok(ASNToken::ObjectIdentifier(first, second, remainder))
-    }
+        items.push(first as u32);
+        items.push(second as u32);
 
-    fn parse_one(input: &[u8]) -> ParseResult<ASNToken> {
+        parse_remainder(&content[1..], &mut items)?;
 
-        fn parse_seq(content: &[u8]) -> Result<ASNToken, ParseError> {
-            if content.is_empty() {
-                Err(ParseError::EmptySequence)
-            } else {
-                Ok(ASNToken::BeginSequence(content))
-            }
-        }
-
-        fn parse_set(content: &[u8]) -> Result<ASNToken, ParseError> {
-            if content.is_empty() {
-                Err(ParseError::EmptySet)
-            } else {
-                Ok(ASNToken::BeginSet(content))
-            }
-        }
-
-        fn parse_null(content: &[u8]) -> Result<ASNToken, ParseError> {
-            if content.is_empty() {
-                Ok(ASNToken::Null)
-            }
-            else {
-                Err(ParseError::NullWithNonEmptyContents(content))
-            }
-        }
-
-        fn parse_integer(content: &[u8]) -> Result<ASNToken, ParseError> {
-            if content.is_empty() {
-                Err(ParseError::ZeroLengthInteger)
-            }
-            else {
-                Ok(ASNToken::Integer(IntegerCell::new(content)))
-            }
-        }
-
-        fn parse_string<T : Fn(&str) -> ASNToken>(content: &[u8], create: T) -> Result<ASNToken, ParseError> {
-            match str::from_utf8(content) {
-                Ok(x) => Ok(create(x)),
-                Err(x) => Err(ParseError::BadUTF8(x))
-            }
-        }
-
-        if input.len() < 1 {
-            return Err(ParseError::InsufficientBytes(2, input))
-        }
-
-        let typ : u8 = input[0];
-
-        if typ & 0b11000000 != 0 {
-            // non-universal type
-            return Err(ParseError::NonUniversalType(typ))
-        }
-
-        let length = parse_length(&input[1..])?;
-
-        if length.value > length.remainder.len() {
-            return Err(ParseError::InsufficientBytes(length.value, length.remainder))
-        }
-
-        let content = &length.remainder[0..length.value];
-
-        let result = match typ & 0b00111111 {
-
-           // simple types
-           0x02 => parse_integer(content),
-           0x03 => Ok(ASNToken::GenericTLV("BitString", content)),
-           0x04 => Ok(ASNToken::GenericTLV("OctetString", content)),
-           0x05 => parse_null(content),
-           0x06 => parse_object_identifier(content),
-           0x0C => parse_string(content, |s| ASNToken::UTF8String(s)),
-           0x13 => parse_string(content, |s| ASNToken::PrintableString(s)),
-           //0x14 => Ok(ASNToken::GenericTLV("T61String", content)),
-           0x16 => parse_string(content, |s| ASNToken::IA5String(s)),
-           0x17 => Ok(ASNToken::GenericTLV("UTCTime", content)),
-
-           // structured types
-           0x30 => parse_seq(content),
-           0x31 => parse_set(content),
-
-           x => Err(ParseError::UnsupportedUniversalType(x))
-        };
-
-        result.map(|value| ParseToken::new(value, &length.remainder[length.value..]))
+        Ok(ASNType::ObjectIdentifier(items))
     }
 
     fn parse_length(input: &[u8]) -> ParseResult<usize> {
@@ -245,8 +202,8 @@ mod rasn {
         }
 
         fn decode_two(input: &[u8]) -> ParseResult<usize> {
-           let value = (input[0] as usize) << 8 | input[1] as usize;
-           parse_ok(value, &input[2..])
+            let value = (input[0] as usize) << 8 | input[1] as usize;
+            parse_ok(value, &input[2..])
         }
 
         fn decode_three(input: &[u8]) -> ParseResult<usize> {
@@ -295,80 +252,117 @@ mod rasn {
         }
     }
 
-    enum ParserState<'a> {
-        Continue(&'a[u8]),
-        EndSequence(&'a[u8]),
-        EndSet(&'a[u8])
+    fn parse_one_type(input: &[u8]) -> ParseResult<ASNType> {
+
+        if input.len() < 1 {
+            return Err(ParseError::InsufficientBytes(2, input))
+        }
+
+        let typ : u8 = input[0];
+
+        if typ & 0b11000000 != 0 {
+            // non-universal type
+            return Err(ParseError::NonUniversalType(typ))
+        }
+
+        let length = parse_length(&input[1..])?;
+
+        if length.value > length.remainder.len() {
+            return Err(ParseError::InsufficientBytes(length.value, length.remainder))
+        }
+
+        let content = &length.remainder[0..length.value];
+
+        let result = match typ & 0b00111111 {
+
+           // simple types
+           0x02 => parse_integer(content),
+           0x03 => Ok(ASNType::GenericTLV("BitString", content)),
+           0x04 => Ok(ASNType::GenericTLV("OctetString", content)),
+           0x05 => parse_null(content),
+           0x06 => parse_object_identifier(content),
+           0x0C => parse_string(content, |s| ASNType::UTF8String(s)),
+           0x13 => parse_string(content, |s| ASNType::PrintableString(s)),
+           //0x14 => Ok(ASNToken::GenericTLV("T61String", content)),
+           0x16 => parse_string(content, |s| ASNType::IA5String(s)),
+           0x17 => Ok(ASNType::GenericTLV("UTCTime", content)),
+
+           // structured types
+           0x30 => parse_seq(content),
+           0x31 => parse_set(content),
+
+           x => Err(ParseError::UnsupportedUniversalType(x))
+        };
+
+        result.map(|value| ParseToken::new(value, &length.remainder[length.value..]))
     }
 
     struct Parser<'a> {
-        states: Vec<ParserState<'a>>
+        cursor: &'a[u8]
     }
 
     impl<'a> Parser<'a> {
         fn new(input: &'a[u8]) -> Parser {
-            Parser { states: vec![ParserState::Continue(input)] }
+            Parser { cursor: input }
         }
     }
 
 
     impl<'a> Iterator for Parser<'a> {
 
-        type Item = ParseResult<'a, ASNToken<'a>>;
+        type Item = Result<ASNType<'a>, ParseError<'a>>;
 
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.states.pop().map(
-                |current| {
-                    match current {
-                        ParserState::Continue(pos) => {
-                            match parse_one(pos) {
-                                Err(e) => {
-                                    self.states.clear();
-                                    Err(e)
-                                },
-                                Ok(token) => match token.value {
-                                    ASNToken::BeginSequence(contents) => {
-                                        self.states.push(ParserState::EndSequence(token.remainder));
-                                        if !contents.is_empty() {
-                                            self.states.push(ParserState::Continue(contents));
-                                        }
-                                        Ok(token)
-                                    },
-                                    ASNToken::BeginSet(contents) => {
-                                        self.states.push(ParserState::EndSet(token.remainder));
-                                        if !contents.is_empty() {
-                                            self.states.push(ParserState::Continue(contents));
-                                        }
-                                        Ok(token)
-                                    }
-                                    _ => {
-                                        if token.remainder.len() > 0 {
-                                            self.states.push(ParserState::Continue(token.remainder));
-                                        }
-                                        Ok(token)
-                                    }
-                                }
-                            }
-                        },
-                        ParserState::EndSequence(remainder) => {
-                            if !remainder.is_empty() {
-                                self.states.push(ParserState::Continue(remainder));
-                            }
 
-                            parse_ok(ASNToken::EndSequence, remainder)
-                        },
-                        ParserState::EndSet(remainder) => {
-                            if !remainder.is_empty() {
-                                self.states.push(ParserState::Continue(remainder));
-                            }
+            if self.cursor.is_empty() {
+                return None
+            }
 
-                            parse_ok(ASNToken::EndSet, remainder)
+            match parse_one_type(self.cursor) {
+                Err(e) => {
+                    self.cursor = &[];
+                    Some(Err(e))
+                },
+                Ok(token) => {
+                    self.cursor = token.remainder;
+                    Some(Ok(token.value))
+                }
+            }
+        }
+    }
+
+    trait ParseHandler {
+        fn begin_constructed(&mut self) -> ();
+        fn end_constructed(&mut self) -> ();
+        fn on_type(&mut self, asn: &ASNType) -> ();
+        fn on_error(&mut self, err: ParseError) -> ();
+    }
+
+    fn parse_all<'a, T : ParseHandler>(input: &'a[u8], handler: &mut T) -> Result<(), ParseError<'a>> {
+        for result in Parser::new(input) {
+            match result {
+                Err(err) => return Err(err),
+                Ok(asn) => {
+                    handler.on_type(&asn);
+                    match asn {
+                        ASNType::Sequence(content) => {
+                            handler.begin_constructed();
+                            parse_all(content, handler)?;
+                            handler.end_constructed();
                         }
+                        ASNType::Set(content) => {
+                            handler.begin_constructed();
+                            parse_all(content, handler)?;
+                            handler.end_constructed();
+                        }
+                        _ => ()
                     }
                 }
-            )
+            }
         }
+
+        Ok(())
     }
 
 
@@ -430,29 +424,29 @@ mod rasn {
 
         #[test]
         fn parse_one_fails_for_non_universal_type() {
-            assert_eq!(parse_one(&[0xFF]), Err(ParseError::NonUniversalType(0xFF)))
+            assert_eq!(parse_one_type(&[0xFF]), Err(ParseError::NonUniversalType(0xFF)))
         }
 
         #[test]
         fn parse_one_fails_for_unknown_universal_type() {
-            assert_eq!(parse_one(&[0x3F, 0x00]), Err(ParseError::UnsupportedUniversalType(0x3F)))
+            assert_eq!(parse_one_type(&[0x3F, 0x00]), Err(ParseError::UnsupportedUniversalType(0x3F)))
         }
 
         #[test]
         fn parses_sequence_correctly() {
-            assert_eq!(parse_one(&[0x30, 0x03, 0x02, 0x03, 0x04, 0x05, 0x06]), parse_ok(ASNToken::BeginSequence(&[0x02, 0x03, 0x04]), &[0x05, 0x06]))
+            assert_eq!(parse_one_type(&[0x30, 0x03, 0x02, 0x03, 0x04, 0x05, 0x06]), parse_ok(ASNType::Sequence(&[0x02, 0x03, 0x04]), &[0x05, 0x06]))
         }
 
         #[test]
         fn parse_sequence_fails_if_insufficient_bytes() {
-            assert_eq!(parse_one(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ParseError::InsufficientBytes(0x0F, &[0xDE, 0xAD])))
+            assert_eq!(parse_one_type(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ParseError::InsufficientBytes(0x0F, &[0xDE, 0xAD])))
         }
 
         #[test]
         fn parse_known_object_identifiers() {
             assert_eq!(
                 parse_object_identifier(&[0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x15, 0x14]),
-                Ok(ASNToken::ObjectIdentifier(1, 3, [6,1,4,1,311,21,20].to_vec()))
+                Ok(ASNType::ObjectIdentifier([1,3, 6,1,4,1,311,21,20].to_vec()))
             )
         }
 
@@ -495,84 +489,62 @@ mod rasn {
             0x1e, 0x7f, 0x86, 0x9b, 0x16, 0x40
         ];
 
+        struct ParsePrinter {
+            indent: usize
+        }
+
+        impl ParsePrinter {
+            fn print_indent(&self) -> () {
+                for _ in 0 .. self.indent {
+                    print!("  ");
+                }
+            }
+        }
+
+        impl ParseHandler for ParsePrinter {
+
+            fn begin_constructed(&mut self) -> () {
+                self.indent += 1;
+            }
+
+            fn end_constructed(&mut self) -> () {
+                self.indent -= 1;
+            }
+
+            fn on_type(&mut self, asn: &ASNType) -> () {
+                self.print_indent();
+                match asn {
+                    ASNType::Sequence(_) => println!("Sequence"),
+                    ASNType::Set(_) => println!("Set"),
+                    ASNType::UTF8String(s) => println!("UTF8String: {}", s),
+                    ASNType::PrintableString(s) => println!("PrintableString: {}", s),
+                    ASNType::IA5String(s) => println!("IA5String: {}", s),
+                    ASNType::Integer(cell) => match cell.as_i32() {
+                        Some(x) => println!("Integer: {}", x),
+                        None => println!("Integer: {:?}", cell.bytes)
+                    }
+                    ASNType::Null => println!("Null"),
+                    ASNType::ObjectIdentifier(items) => {
+                        println!("ObjectIdentifier: {:?}", items);
+                    }
+                    ASNType::GenericTLV(name, contents) => {
+                        println!("{} ({})", name, contents.len())
+                    }
+                }
+            }
+
+            fn on_error(&mut self, err: ParseError) -> () {
+                println!("Error: {:?}", err);
+            }
+        }
+
 
         #[test]
         fn iterates_over_x509() {
 
-            let mut indent : usize = 0;
+           let mut handler = ParsePrinter{indent: 0};
 
-            let parser = Parser::new(&CERT_DATA);
-
-            fn print_indent(indent: usize) {
-                for _ in 0..indent {
-                    print!("    ");
-                }
-            }
-
-            for result in parser {
-                match result {
-                    Err(x) => println!("{:?}", x),
-                    Ok(token) => match token.value {
-                       ASNToken::BeginSequence(_) => {
-                           print_indent(indent);
-                           println!("BeginSequence");
-                           indent += 1;
-                       }
-                       ASNToken::EndSequence =>  {
-                           indent -= 1;
-                           print_indent(indent);
-                           println!("EndSequence");
-                       }
-                        ASNToken::BeginSet(_) => {
-                            print_indent(indent);
-                            println!("BeginSet");
-                            indent += 1;
-                        }
-                        ASNToken::EndSet =>  {
-                            indent -= 1;
-                            print_indent(indent);
-                            println!("EndSet");
-                        }
-                        ASNToken::Integer(cell) => {
-                            print_indent(indent);
-                            match cell.as_i32() {
-                                Some(x) => println!("Integer: {}", x),
-                                None => println!("Integer: {:?}", cell.bytes),
-                            }
-
-                        }
-                        ASNToken::PrintableString(value) => {
-                            print_indent(indent);
-                            println!("PrintableString: {}", value);
-
-                        }
-                        ASNToken::IA5String(value) => {
-                            print_indent(indent);
-                            println!("IA5String: {}", value);
-
-                        }
-                        ASNToken::UTF8String(value) => {
-                            print_indent(indent);
-                            println!("UTF8String: {}", value);
-
-                        }
-                        ASNToken::ObjectIdentifier(first, second, ids) => {
-                            print_indent(indent);
-                            println!("ObjectIdentifier: {} {} {:?}", first, second, ids);
-
-                        }
-                        ASNToken::Null => {
-                            print_indent(indent);
-                            println!("Null");
-
-                        }
-                        ASNToken::GenericTLV(name, contents) => {
-                           print_indent(indent);
-                           println!("{} ({})", name, contents.len());
-                        }
-                    }
-                }
-            }
+           parse_all(&CERT_DATA, &mut handler).unwrap();
 
         }
 
