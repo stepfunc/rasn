@@ -1,7 +1,6 @@
 mod rasn {
 
     use std::str;
-    use rasn::ASNToken::Null;
 
     #[derive(Debug, PartialEq)]
     struct ParseToken<'a, T> {
@@ -52,6 +51,8 @@ mod rasn {
         EndSet,
         Integer(IntegerCell<'a>),
         PrintableString(&'a str),
+        IA5String(&'a str),
+        UTF8String(&'a str),
         Null,
         GenericTLV(&'static str, &'a[u8]),  // any TLV
     }
@@ -90,7 +91,7 @@ mod rasn {
 
         fn parse_set(content: &[u8]) -> Result<ASNToken, ParseError> {
             if content.is_empty() {
-                Err(ParseError::EmptySequence)
+                Err(ParseError::EmptySet)
             } else {
                 Ok(ASNToken::BeginSet(content))
             }
@@ -98,7 +99,7 @@ mod rasn {
 
         fn parse_null(content: &[u8]) -> Result<ASNToken, ParseError> {
             if content.is_empty() {
-                Ok(Null)
+                Ok(ASNToken::Null)
             }
             else {
                 Err(ParseError::NullWithNonEmptyContents(content))
@@ -114,15 +115,11 @@ mod rasn {
             }
         }
 
-        fn parse_printable_string(content: &[u8]) -> Result<ASNToken, ParseError> {
+        fn parse_string<T : Fn(&str) -> ASNToken>(content: &[u8], create: T) -> Result<ASNToken, ParseError> {
             match str::from_utf8(content) {
-                Ok(x) => Ok(ASNToken::PrintableString(x)),
+                Ok(x) => Ok(create(x)),
                 Err(x) => Err(ParseError::BadUTF8(x))
             }
-        }
-
-        fn parse_generic_tlv<'a>(name: &'static str, contents: &'a[u8]) -> Result<ASNToken<'a>, ParseError<'a>> {
-           Ok(ASNToken::GenericTLV(name, contents))
         }
 
         if input.len() < 1 {
@@ -152,10 +149,10 @@ mod rasn {
            0x04 => Ok(ASNToken::GenericTLV("OctetString", content)),
            0x05 => parse_null(content),
            0x06 => Ok(ASNToken::GenericTLV("ObjectIdentifier", content)),
-           0x0C => Ok(ASNToken::GenericTLV("UTF8String", content)),
-           0x13 => parse_printable_string(content),
-           0x14 => Ok(ASNToken::GenericTLV("T61String", content)),
-           0x16 => Ok(ASNToken::GenericTLV("IA5String", content)),
+           0x0C =>parse_string(content, |s| ASNToken::UTF8String(s)),
+           0x13 => parse_string(content, |s| ASNToken::PrintableString(s)),
+           //0x14 => Ok(ASNToken::GenericTLV("T61String", content)),
+           0x16 => parse_string(content, |s| ASNToken::IA5String(s)),
            0x17 => Ok(ASNToken::GenericTLV("UTCTime", content)),
 
            // structured types
@@ -474,6 +471,16 @@ mod rasn {
                         ASNToken::PrintableString(value) => {
                             print_indent(indent);
                             println!("PrintableString: {}", value);
+
+                        }
+                        ASNToken::IA5String(value) => {
+                            print_indent(indent);
+                            println!("IA5String: {}", value);
+
+                        }
+                        ASNToken::UTF8String(value) => {
+                            print_indent(indent);
+                            println!("UTF8String: {}", value);
 
                         }
                         ASNToken::Null => {
