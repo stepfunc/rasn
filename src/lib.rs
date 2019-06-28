@@ -55,6 +55,7 @@ mod rasn {
         UTF8String(&'a str),
         Null,
         GenericTLV(&'static str, &'a[u8]),  // any TLV
+        ObjectIdentifier(Vec<u32>)
     }
 
     #[derive(Debug, PartialEq)]
@@ -115,6 +116,10 @@ mod rasn {
             }
         }
 
+        fn parse_object_identifier(content: &[u8]) -> Result<ASNToken, ParseError> {
+            Ok(ASNToken::ObjectIdentifier(vec![1, 2, 840, 113549]))
+        }
+
         fn parse_string<T : Fn(&str) -> ASNToken>(content: &[u8], create: T) -> Result<ASNToken, ParseError> {
             match str::from_utf8(content) {
                 Ok(x) => Ok(create(x)),
@@ -148,8 +153,8 @@ mod rasn {
            0x03 => Ok(ASNToken::GenericTLV("BitString", content)),
            0x04 => Ok(ASNToken::GenericTLV("OctetString", content)),
            0x05 => parse_null(content),
-           0x06 => Ok(ASNToken::GenericTLV("ObjectIdentifier", content)),
-           0x0C =>parse_string(content, |s| ASNToken::UTF8String(s)),
+           0x06 => parse_object_identifier(content),
+           0x0C => parse_string(content, |s| ASNToken::UTF8String(s)),
            0x13 => parse_string(content, |s| ASNToken::PrintableString(s)),
            //0x14 => Ok(ASNToken::GenericTLV("T61String", content)),
            0x16 => parse_string(content, |s| ASNToken::IA5String(s)),
@@ -481,6 +486,11 @@ mod rasn {
                         ASNToken::UTF8String(value) => {
                             print_indent(indent);
                             println!("UTF8String: {}", value);
+
+                        }
+                        ASNToken::ObjectIdentifier(ids) => {
+                            print_indent(indent);
+                            println!("ObjectIdentifier: {:?}", ids);
 
                         }
                         ASNToken::Null => {
