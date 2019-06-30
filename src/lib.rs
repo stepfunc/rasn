@@ -125,7 +125,7 @@ mod rasn {
                     match items.split_last() {
                         Some((last, first)) => {
                             for value in first {
-                                f.write_fmt(format_args!("{}.", value));
+                                f.write_fmt(format_args!("{}.", value))?;
                             }
                             f.write_fmt(format_args!("{}", last))
                         }
