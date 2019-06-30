@@ -1,4 +1,5 @@
 extern crate chrono;
+extern crate core;
 
 mod rasn {
 
@@ -61,6 +62,69 @@ mod rasn {
         OctetString(&'a[u8]),
         ObjectIdentifier(Vec<u32>)
     }
+
+    impl<'a> std::fmt::Display for ASNType<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            match self {
+                ASNType::Sequence(_) => {
+                    f.write_str("Sequence")
+                }
+                ASNType::Set(_) => {
+                    f.write_str("Set")
+                },
+                ASNType::UTF8String(s) => {
+                    f.write_str("UTF8String: ")?;
+                    f.write_str(s)
+                },
+                ASNType::PrintableString(s) => {
+                    f.write_str("PrintableString: ")?;
+                    f.write_str(s)
+                },
+                ASNType::IA5String(s) => {
+                    f.write_str("IA5String: ")?;
+                    f.write_str(s)
+                },
+                ASNType::Integer(cell) => match cell.as_i32() {
+                    Some(x) => {
+                        f.write_fmt(format_args!("Integer: {}", x))
+                    },
+                    None => {
+                        f.write_str("Integer: (> u32)")
+                    }
+                }
+                ASNType::Null => {
+                    f.write_str("Null")
+                },
+                ASNType::ObjectIdentifier(items) => {
+                    f.write_str("ObjectIdentifier: ")?;
+
+                    match items.split_last() {
+                        Some((last, first)) => {
+                            for value in first {
+                                f.write_fmt(format_args!("{}.", value));
+                            }
+                            f.write_fmt(format_args!("{}", last))
+                        }
+                        None => {
+                            Ok(())
+                        }
+                    }
+
+                }
+                ASNType::UTCTime(value) => {
+                    f.write_fmt(format_args!("UTCTime: {}", value))
+                }
+                ASNType::BitString(unused, octets) => {
+                    f.write_fmt(format_args!("BitString: {}", unused))
+                }
+                ASNType::OctetString( octets) => {
+                    f.write_fmt(format_args!("OctetString: {}", octets.len()))
+                }
+            }
+
+        }
+    }
+
 
     #[derive(Debug, PartialEq)]
     enum ASNError<'a> {
@@ -566,30 +630,7 @@ mod rasn {
 
             fn on_type(&mut self, asn: &ASNType) -> () {
                 self.print_indent();
-                match asn {
-                    ASNType::Sequence(_) => println!("Sequence"),
-                    ASNType::Set(_) => println!("Set"),
-                    ASNType::UTF8String(s) => println!("UTF8String: {}", s),
-                    ASNType::PrintableString(s) => println!("PrintableString: {}", s),
-                    ASNType::IA5String(s) => println!("IA5String: {}", s),
-                    ASNType::Integer(cell) => match cell.as_i32() {
-                        Some(x) => println!("Integer: {}", x),
-                        None => println!("Integer: {:?}", cell.bytes)
-                    }
-                    ASNType::Null => println!("Null"),
-                    ASNType::ObjectIdentifier(items) => {
-                        println!("ObjectIdentifier: {:?}", items);
-                    }
-                    ASNType::UTCTime(value) => {
-                        println!("UTCTime: {}", value);
-                    }
-                    ASNType::BitString(unused, octets) => {
-                        println!("BitString: {} {:?}", unused, octets)
-                    }
-                    ASNType::OctetString( octets) => {
-                        println!("OctetString: {:?}", octets)
-                    }
-                }
+                println!("{}", asn);
             }
 
             fn on_error(&mut self, err: &ASNError) -> () {
