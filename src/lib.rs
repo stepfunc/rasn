@@ -32,19 +32,17 @@ mod rasn {
 
         fn as_i32(&self) -> Option<i32> {
 
-            match self.bytes.len() {
-                1 => Some(self.bytes[0] as i32),
-                2 => Some(
-                    ((self.bytes[0] as i32) << 8) | (self.bytes[1] as i32)
-                ),
-                3 => Some(
-                    ((self.bytes[0] as i32) << 16) | ((self.bytes[1] as i32) << 8) | (self.bytes[2] as i32)
-                ),
-                4 => Some(
-                    ((self.bytes[0] as i32) << 24) | ((self.bytes[1] as i32) << 16) | ((self.bytes[2] as i32) << 8) | (self.bytes[3] as i32)
-                ),
-                _ => None
+            // can only parse values with length in [1,4] bytes
+            if (1usize..4usize).contains(&self.bytes.len()) {
+                return None;
             }
+
+            let mut acc : i32 = 0;
+            for byte in self.bytes {
+                acc <<= 8;
+                acc |= *byte as i32;
+            }
+            Some(acc)
         }
     }
 
