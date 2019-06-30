@@ -49,6 +49,30 @@ mod rasn {
     }
 
     #[derive(Debug, PartialEq)]
+    pub struct BitStringCell<'a> {
+        // the number of unused bits in last octet [0, 7]
+        unused_bits: u8,
+        // the octets, the last one only has (8 - unused_bits) bits
+        bytes: &'a[u8]
+    }
+
+    impl<'a> BitStringCell<'a> {
+        fn new(unused_bits: u8, bytes: &'a[u8]) -> BitStringCell<'a> {
+            BitStringCell{ unused_bits, bytes}
+        }
+
+        // convertible to octets if it's all full bytes
+        fn octets(&self) -> Option<&[u8]> {
+            if self.unused_bits == 0 {
+                Some(self.bytes)
+            }
+            else {
+                None
+            }
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
     enum ASNType<'a> {
         Sequence(&'a[u8]),             // the interior data of the sequence
         Set(&'a[u8]),                  // the interior data of the set
@@ -58,7 +82,7 @@ mod rasn {
         UTF8String(&'a str),
         Null,
         UTCTime(chrono::DateTime<chrono::FixedOffset>),
-        BitString(u8, &'a[u8]),        // the number of unused bits in last octet + the octets
+        BitString(BitStringCell<'a>),
         OctetString(&'a[u8]),
         ObjectIdentifier(Vec<u32>)
     }
@@ -114,11 +138,11 @@ mod rasn {
                 ASNType::UTCTime(value) => {
                     f.write_fmt(format_args!("UTCTime: {}", value))
                 }
-                ASNType::BitString(unused, octets) => {
-                    f.write_fmt(format_args!("BitString: {}", unused))
+                ASNType::BitString(_) => {
+                    f.write_fmt(format_args!("BitString"))
                 }
-                ASNType::OctetString( octets) => {
-                    f.write_fmt(format_args!("OctetString: {}", octets.len()))
+                ASNType::OctetString(_) => {
+                    f.write_fmt(format_args!("OctetString"))
                 }
             }
 
@@ -227,7 +251,7 @@ mod rasn {
             return Err(ASNError::BitStringUnusedBitsTooLarge(unused_bits));
         }
 
-        Ok(ASNType::BitString(unused_bits, &contents[1..]))
+        Ok(ASNType::BitString(BitStringCell::new(unused_bits, &contents[1..])))
     }
 
     fn parse_object_identifier(contents: &[u8]) -> Result<ASNType, ASNError> {
@@ -631,6 +655,31 @@ mod rasn {
             fn on_type(&mut self, asn: &ASNType) -> () {
                 self.print_indent();
                 println!("{}", asn);
+                match asn {
+                    ASNType::BitString(cell) => {
+                        match cell.octets() {
+                            Some(octets) => {
+                                self.indent +=1;
+                                for chunk in octets.chunks(16) {
+                                    self.print_indent();
+                                    match chunk.split_last() {
+                                        Some((last, first)) => {
+                                            for byte in first  {
+                                                print!("{:02X}:", byte)
+                                            }
+                                            println!("{:02X}", last)
+
+                                        }
+                                        None => {}
+                                    }
+                                }
+                                self.indent -=1;
+                            }
+                            None => ()
+                        }
+                    }
+                    _ => ()
+                }
             }
 
             fn on_error(&mut self, err: &ASNError) -> () {
