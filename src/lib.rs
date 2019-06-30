@@ -4,7 +4,7 @@ mod rasn {
 
     use chrono;
     use std::str;
-    use chrono::{DateTime, FixedOffset};
+
 
     #[derive(Debug, PartialEq)]
     struct ParseToken<'a, T> {
@@ -57,7 +57,8 @@ mod rasn {
         UTF8String(&'a str),
         Null,
         UTCTime(chrono::DateTime<chrono::FixedOffset>),
-        GenericTLV(&'static str, &'a[u8]),  // any TLV
+        BitString(u8, &'a[u8]),        // the number of unused bits in last octet + the octets
+        OctetString(&'a[u8]),
         ObjectIdentifier(Vec<u32>)
     }
 
@@ -76,7 +77,8 @@ mod rasn {
         BadLengthEncoding(u8),
         BadOidLength,
         BadUTF8(str::Utf8Error),
-        BadUTCTime(chrono::format::ParseError, &'a str)
+        BadUTCTime(chrono::format::ParseError, &'a str),
+        BitStringUnusedBitsTooLarge(u8)
     }
 
     type ParseResult<'a, T> = Result<ParseToken<'a, T>, ASNError<'a>>;
@@ -85,67 +87,57 @@ mod rasn {
         Ok(ParseToken { value, remainder })
     }
 
-    fn parse_seq(content: &[u8]) -> Result<ASNType, ASNError> {
-        if content.is_empty() {
+    fn parse_seq(contents: &[u8]) -> Result<ASNType, ASNError> {
+        if contents.is_empty() {
             Err(ASNError::EmptySequence)
         } else {
-            Ok(ASNType::Sequence(content))
+            Ok(ASNType::Sequence(contents))
         }
     }
 
-    fn parse_set(content: &[u8]) -> Result<ASNType, ASNError> {
-        if content.is_empty() {
+    fn parse_set(contents: &[u8]) -> Result<ASNType, ASNError> {
+        if contents.is_empty() {
             Err(ASNError::EmptySet)
         } else {
-            Ok(ASNType::Set(content))
+            Ok(ASNType::Set(contents))
         }
     }
 
-    fn parse_null(content: &[u8]) -> Result<ASNType, ASNError> {
-        if content.is_empty() {
+    fn parse_null(contents: &[u8]) -> Result<ASNType, ASNError> {
+        if contents.is_empty() {
             Ok(ASNType::Null)
         }
         else {
-            Err(ASNError::NullWithNonEmptyContents(content))
+            Err(ASNError::NullWithNonEmptyContents(contents))
         }
     }
 
-    fn parse_integer(content: &[u8]) -> Result<ASNType, ASNError> {
-        if content.is_empty() {
+    fn parse_integer(contents: &[u8]) -> Result<ASNType, ASNError> {
+        if contents.is_empty() {
             Err(ASNError::ZeroLengthInteger)
         }
         else {
-            Ok(ASNType::Integer(IntegerCell::new(content)))
+            Ok(ASNType::Integer(IntegerCell::new(contents)))
         }
     }
 
-    fn parse_utc_time(content: &[u8]) -> Result<ASNType, ASNError> {
+    const UTC_WITH_SECONDS : &str = "%y%m%d%H%M%SZ";
+    const UTC_WITHOUT_SECONDS : &str = "%y%m%d%H%MZ";
+    const TZ_WITH_SECONDS: &str = "%y%m%d%H%M%S%z";
+    const TZ_WITHOUT_SECONDS: &str = "%y%m%d%H%M%z";
 
-        fn try_parse_utc_variants(s: &str) -> Result<chrono::DateTime<FixedOffset>, chrono::ParseError> {
+    fn parse_utc_time(contents: &[u8]) -> Result<ASNType, ASNError> {
 
-            let utc_with_seconds = "%y%m%d%H%M%SZ";
-            let utc_without_seconds = "%y%m%d%H%MZ";
-
+        fn try_parse_all_variants(s: &str) -> Result<chrono::DateTime<chrono::FixedOffset>, chrono::ParseError> {
             // try the explicitly UTC variant
-            chrono::NaiveDateTime::parse_from_str(s,utc_with_seconds)
-                .or_else(|err|  chrono::NaiveDateTime::parse_from_str(s, utc_without_seconds))
-                .map(|t| DateTime::from_utc(t, FixedOffset::east(0)))
+            chrono::NaiveDateTime::parse_from_str(s,UTC_WITH_SECONDS)
+                .or_else(|_|  chrono::NaiveDateTime::parse_from_str(s, UTC_WITHOUT_SECONDS))
+                .map(|t| chrono::DateTime::from_utc(t, chrono::FixedOffset::east(0)))
+                .or_else(|_| chrono::DateTime::parse_from_str(s,TZ_WITH_SECONDS))
+                .or_else(|_| chrono::DateTime::parse_from_str(s, TZ_WITHOUT_SECONDS))
         }
 
-        fn try_parse_tz_variants(s: &str) -> Result<chrono::DateTime<FixedOffset>, chrono::ParseError> {
-
-            let tz_with_seconds = "%y%m%d%H%M%S%z";
-            let tz_without_seconds = "%y%m%d%H%M%z";
-
-            chrono::DateTime::parse_from_str(s,tz_with_seconds)
-                .or_else(|_|  chrono::DateTime::parse_from_str(s, tz_without_seconds))
-        }
-
-        fn try_parse_all_variants(s: &str) -> Result<chrono::DateTime<FixedOffset>, chrono::ParseError> {
-            try_parse_utc_variants(s).or_else(|_| try_parse_tz_variants(s))
-        }
-
-        match str::from_utf8(content) {
+        match str::from_utf8(contents) {
             Ok(s) => match try_parse_all_variants(s){
                 Ok(time) => Ok(ASNType::UTCTime(time)),
                 Err(err) => Err(ASNError::BadUTCTime(err, s))
@@ -154,21 +146,34 @@ mod rasn {
         }
     }
 
-    fn parse_string<T : Fn(&str) -> ASNType>(content: &[u8], create: T) -> Result<ASNType, ASNError> {
-        match str::from_utf8(content) {
+    fn parse_string<T : Fn(&str) -> ASNType>(contents: &[u8], create: T) -> Result<ASNType, ASNError> {
+        match str::from_utf8(contents) {
             Ok(x) => Ok(create(x)),
             Err(x) => Err(ASNError::BadUTF8(x))
         }
     }
 
-    fn parse_object_identifier(content: &[u8]) -> Result<ASNType, ASNError> {
+    fn parse_bit_string(contents: &[u8]) -> Result<ASNType, ASNError> {
+        if contents.is_empty() {
+            return Err(ASNError::InsufficientBytes(0, contents))
+        }
 
-        fn parse_remainder<'a>(content: &'a[u8], items: &mut Vec<u32>) -> Result<(), ASNError<'a>> {
+        let unused_bits = contents[0];
+        if unused_bits > 7 {
+            return Err(ASNError::BitStringUnusedBitsTooLarge(unused_bits));
+        }
 
-            fn parse_one(content: &[u8]) -> ParseResult<u32> {
+        Ok(ASNType::BitString(unused_bits, &contents[1..]))
+    }
+
+    fn parse_object_identifier(contents: &[u8]) -> Result<ASNType, ASNError> {
+
+        fn parse_remainder<'a>(contents: &'a[u8], items: &mut Vec<u32>) -> Result<(), ASNError<'a>> {
+
+            fn parse_one(contents: &[u8]) -> ParseResult<u32> {
                 let mut sum : u32 = 0;
                 let mut count: u32 = 0;
-                let mut cursor = content;
+                let mut cursor = contents;
 
                 loop {
 
@@ -191,7 +196,7 @@ mod rasn {
                 }
             }
 
-            let mut current = content;
+            let mut current = contents;
 
             while !current.is_empty() {
                 match parse_one(current) {
@@ -208,19 +213,19 @@ mod rasn {
             Ok(())
         }
 
-        if content.is_empty() {
-            return Err(ASNError::InsufficientBytes(1, content))
+        if contents.is_empty() {
+            return Err(ASNError::InsufficientBytes(1, contents))
         }
 
-        let first = content[0] / 40;
-        let second = content[0] % 40;
+        let first = contents[0] / 40;
+        let second = contents[0] % 40;
 
         let mut items : Vec<u32> = Vec::new();
 
         items.push(first as u32);
         items.push(second as u32);
 
-        parse_remainder(&content[1..], &mut items)?;
+        parse_remainder(&contents[1..], &mut items)?;
 
         Ok(ASNType::ObjectIdentifier(items))
     }
@@ -311,24 +316,24 @@ mod rasn {
             return Err(ASNError::InsufficientBytes(length.value, length.remainder))
         }
 
-        let content = &length.remainder[0..length.value];
+        let contents = &length.remainder[0..length.value];
 
         let result = match typ & 0b00111111 {
 
            // simple types
-           0x02 => parse_integer(content),
-           0x03 => Ok(ASNType::GenericTLV("BitString", content)),
-           0x04 => Ok(ASNType::GenericTLV("OctetString", content)),
-           0x05 => parse_null(content),
-           0x06 => parse_object_identifier(content),
-           0x0C => parse_string(content, |s| ASNType::UTF8String(s)),
-           0x13 => parse_string(content, |s| ASNType::PrintableString(s)),
-           0x16 => parse_string(content, |s| ASNType::IA5String(s)),
-           0x17 => parse_utc_time(content),
+           0x02 => parse_integer(contents),
+           0x03 => parse_bit_string(contents),
+           0x04 => Ok(ASNType::OctetString(contents)),
+           0x05 => parse_null(contents),
+           0x06 => parse_object_identifier(contents),
+           0x0C => parse_string(contents, |s| ASNType::UTF8String(s)),
+           0x13 => parse_string(contents, |s| ASNType::PrintableString(s)),
+           0x16 => parse_string(contents, |s| ASNType::IA5String(s)),
+           0x17 => parse_utc_time(contents),
 
            // structured types
-           0x30 => parse_seq(content),
-           0x31 => parse_set(content),
+           0x30 => parse_seq(contents),
+           0x31 => parse_set(contents),
 
            x => Err(ASNError::UnsupportedUniversalType(x))
         };
@@ -578,8 +583,11 @@ mod rasn {
                     ASNType::UTCTime(value) => {
                         println!("UTCTime: {}", value);
                     }
-                    ASNType::GenericTLV(name, contents) => {
-                        println!("{} ({})", name, contents.len())
+                    ASNType::BitString(unused, octets) => {
+                        println!("BitString: {} {:?}", unused, octets)
+                    }
+                    ASNType::OctetString( octets) => {
+                        println!("OctetString: {:?}", octets)
                     }
                 }
             }
