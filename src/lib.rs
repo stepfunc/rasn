@@ -33,7 +33,7 @@ mod rasn {
         fn as_i32(&self) -> Option<i32> {
 
             // can only parse values with length in [1,4] bytes
-            if (1usize..4usize).contains(&self.bytes.len()) {
+            if !(1usize..4usize).contains(&self.bytes.len()) {
                 return None;
             }
 
