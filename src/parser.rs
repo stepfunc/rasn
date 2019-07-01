@@ -17,12 +17,13 @@ impl<'a, T> ParseToken<'a, T> {
 }
 
 type ParseResult<'a, T> = Result<ParseToken<'a, T>, ASNError<'a>>;
+type ASNResult<'a> = Result<ASNType<'a>, ASNError<'a>>;
 
 fn parse_ok<T>(value : T,  remainder: &[u8]) -> ParseResult<T> {
     Ok(ParseToken { value, remainder })
 }
 
-fn parse_seq(contents: &[u8]) -> Result<ASNType, ASNError> {
+fn parse_seq(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Err(ASNError::EmptySequence)
     } else {
@@ -30,7 +31,7 @@ fn parse_seq(contents: &[u8]) -> Result<ASNType, ASNError> {
     }
 }
 
-fn parse_set(contents: &[u8]) -> Result<ASNType, ASNError> {
+fn parse_set(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Err(ASNError::EmptySet)
     } else {
@@ -38,7 +39,7 @@ fn parse_set(contents: &[u8]) -> Result<ASNType, ASNError> {
     }
 }
 
-fn parse_null(contents: &[u8]) -> Result<ASNType, ASNError> {
+fn parse_null(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Ok(ASNType::Null)
     }
@@ -47,7 +48,7 @@ fn parse_null(contents: &[u8]) -> Result<ASNType, ASNError> {
     }
 }
 
-fn parse_integer(contents: &[u8]) -> Result<ASNType, ASNError> {
+fn parse_integer(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Err(ASNError::ZeroLengthInteger)
     }
@@ -61,7 +62,7 @@ const UTC_WITHOUT_SECONDS : &str = "%y%m%d%H%MZ";
 const TZ_WITH_SECONDS: &str = "%y%m%d%H%M%S%z";
 const TZ_WITHOUT_SECONDS: &str = "%y%m%d%H%M%z";
 
-fn parse_utc_time(contents: &[u8]) -> Result<ASNType, ASNError> {
+fn parse_utc_time(contents: &[u8]) -> ASNResult {
 
     fn try_parse_all_variants(s: &str) -> Result<chrono::DateTime<chrono::FixedOffset>, chrono::ParseError> {
         // try the explicitly UTC variant
@@ -81,14 +82,14 @@ fn parse_utc_time(contents: &[u8]) -> Result<ASNType, ASNError> {
     }
 }
 
-fn parse_string<T : Fn(&str) -> ASNType>(contents: &[u8], create: T) -> Result<ASNType, ASNError> {
+fn parse_string<T : Fn(&str) -> ASNType>(contents: &[u8], create: T) -> ASNResult {
     match str::from_utf8(contents) {
         Ok(x) => Ok(create(x)),
         Err(x) => Err(ASNError::BadUTF8(x))
     }
 }
 
-fn parse_bit_string(contents: &[u8]) -> Result<ASNType, ASNError> {
+fn parse_bit_string(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         return Err(ASNError::InsufficientBytes(0, contents))
     }
@@ -101,7 +102,7 @@ fn parse_bit_string(contents: &[u8]) -> Result<ASNType, ASNError> {
     Ok(ASNType::BitString(BitStringCell::new(unused_bits, &contents[1..])))
 }
 
-fn parse_object_identifier(contents: &[u8]) -> Result<ASNType, ASNError> {
+fn parse_object_identifier(contents: &[u8]) -> ASNResult {
 
     fn parse_remainder<'a>(contents: &'a[u8], items: &mut Vec<u32>) -> Result<(), ASNError<'a>> {
 
