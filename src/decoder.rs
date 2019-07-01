@@ -78,11 +78,11 @@ pub fn main() -> Result<(), std::io::Error> {
 
     let mut f = File::open(&args[1])?;
 
-    let mut buffer : [u8; 1024] = [0; 1024];
+    let mut vec : Vec<u8> = Vec::new();
 
-    let count : usize = f.read(&mut buffer)?;
+    f.read_to_end(&mut vec)?;
 
-    match parse_all(&buffer[0..count], &mut ParsePrinter::new()) {
+    match parse_all(&vec, &mut ParsePrinter::new()) {
         Err(err) => {
             eprintln!("{}", err);
             process::exit(-1);
