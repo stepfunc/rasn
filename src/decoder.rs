@@ -82,7 +82,7 @@ pub fn main() -> Result<(), std::io::Error>{
 
     let count : usize = f.read(&mut buffer)?;
 
-    parse_all(&buffer[count..], &mut ParsePrinter::new()).unwrap();
+    parse_all(&buffer[0..count], &mut ParsePrinter::new()).unwrap();
 
     Ok(())
 }
