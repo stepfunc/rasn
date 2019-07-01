@@ -67,7 +67,7 @@ impl ParseHandler for ParsePrinter {
     }
 }
 
-pub fn main() -> Result<(), std::io::Error>{
+pub fn main() -> Result<(), std::io::Error> {
 
     let args: Vec<String> = env::args().collect();
 
@@ -82,7 +82,12 @@ pub fn main() -> Result<(), std::io::Error>{
 
     let count : usize = f.read(&mut buffer)?;
 
-    parse_all(&buffer[0..count], &mut ParsePrinter::new()).unwrap();
+    match parse_all(&buffer[0..count], &mut ParsePrinter::new()) {
+        Err(err) => {
+            eprintln!("{}", err);
+            process::exit(-1);
+        }
+        Ok(()) => Ok(())
+    }
 
-    Ok(())
 }

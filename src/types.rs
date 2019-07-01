@@ -128,7 +128,6 @@ impl<'a> std::fmt::Display for ASNType<'a> {
     }
 }
 
-
 #[derive(Debug, PartialEq)]
 pub enum ASNError<'a> {
     EmptySequence,
@@ -146,5 +145,57 @@ pub enum ASNError<'a> {
     BadUTF8(std::str::Utf8Error),
     BadUTCTime(chrono::format::ParseError, &'a str),
     BitStringUnusedBitsTooLarge(u8)
+}
+
+impl<'a> std::fmt::Display for ASNError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ASNError::EmptySequence => {
+                f.write_str("empty sequence")
+            }
+            ASNError::EmptySet => {
+                f.write_str("empty set")
+            }
+            ASNError::ZeroLengthInteger => {
+                f.write_str("zero length integer")
+            }
+            ASNError::NullWithNonEmptyContents(contents) => {
+                f.write_fmt(format_args!("NULL type w/ non-empty contents (length == {})", contents.len()))
+            }
+            ASNError::NonUniversalType(tag) => {
+                f.write_fmt(format_args!("Non-universal type w/ tag: {})", tag))
+            }
+            ASNError::UnsupportedUniversalType(tag) => {
+                f.write_fmt(format_args!("Unsupported univeral type w/ tag: {})", tag))
+            }
+            ASNError::InsufficientBytes(required, actual) => {
+                f.write_fmt(format_args!("Insufficient bytes, required: {} present: {}", required, actual.len()))
+            }
+            ASNError::UnsupportedIndefiniteLength => {
+                f.write_str("Encountered indefinite length encoding. Not allowed in DER.")
+            }
+            ASNError::ReservedLengthValue => {
+                f.write_str("Length byte count of 127 is reserved")
+            }
+            ASNError::UnsupportedLengthByteCount(length) => {
+                f.write_fmt(format_args!("Length byte count of {} not supported", length))
+            }
+            ASNError::BadLengthEncoding(value) => {
+                f.write_fmt(format_args!("Length should be encoded as a single byte: {}", value))
+            }
+            ASNError::BadOidLength => {
+                f.write_str("Bad OID length")
+            }
+            ASNError::BadUTF8(err) => {
+                f.write_fmt(format_args!("Bad UTF8 encoding: {}", err))
+            }
+            ASNError::BadUTCTime(err, str) => {
+                f.write_fmt(format_args!("Bad UTC time string ({}): {}", str, err))
+            }
+            ASNError::BitStringUnusedBitsTooLarge(unused) => {
+                f.write_fmt(format_args!("Bit string w/ unused bits outside range [0..7]: {}", unused))
+            }
+        }
+    }
 }
 
