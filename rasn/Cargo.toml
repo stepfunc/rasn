@@ -3,13 +3,5 @@ name = "rasn"
 version = "0.1.0"
 authors = ["jadamcrain <jadamcrain@gmail.com>"]
 
-[lib]
-name = "rasn"
-path = "src/lib.rs"
-
-[[bin]]
-name = "decoder"
-path = "src/decoder.rs"
-
 [dependencies]
 chrono = "0.4"

@@ -107,7 +107,7 @@ mod tests {
     fn iterates_over_x509() {
 
         // TODO - figure out why there's an additional byte at the end of the DER cert
-        let (_, cert) = include_bytes!("../x509/512b-rsa-example-cert.der").split_last().unwrap();
+        let cert = include_bytes!("../../x509/512b-rsa-example-cert.der");
 
         parse_all(cert, &mut ParsePrinter::new()).unwrap()
     }
