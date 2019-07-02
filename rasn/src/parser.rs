@@ -3,6 +3,7 @@ use chrono;
 use std::str;
 
 use types::{ASNError, ASNType, ASNInteger, ASNBitString, ASNObjectIdentifier};
+use chrono::{DateTime, FixedOffset};
 
 #[derive(Debug, PartialEq)]
 struct ParseToken<'a, T> {
@@ -304,9 +305,27 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn expect_integer(&mut self) -> Result<ASNInteger<'a>, ASNError<'a>> {
+        match self.next() {
+            Some(Ok(ASNType::Integer(x))) => Ok(x),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Err(err)) => Err(err),
+            None => Err(ASNError::EndOfStream)
+        }
+    }
+
     pub fn expect_bit_string(&mut self) -> Result<ASNBitString<'a>, ASNError<'a>> {
         match self.next() {
             Some(Ok(ASNType::BitString(bs))) => Ok(bs),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Err(err)) => Err(err),
+            None => Err(ASNError::EndOfStream)
+        }
+    }
+
+    pub fn expect_utc_time(&mut self) -> Result<DateTime<FixedOffset>, ASNError<'a>> {
+        match self.next() {
+            Some(Ok(ASNType::UTCTime(time))) => Ok(time),
             Some(Ok(_)) => Err(ASNError::UnexpectedType),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
