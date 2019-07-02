@@ -1,9 +1,20 @@
 use types::{ASNBitString, ASNObjectIdentifier, ASNError};
 use parser::Parser;
 
+pub struct Constructed<'a, T> {
+    pub bytes: &'a[u8],
+    pub value: T
+}
+
+impl<'a, T> Constructed<'a, T> {
+    pub fn new(bytes: &'a[u8], value: T) -> Constructed<T> {
+        Constructed { bytes, value}
+    }
+}
+
 pub struct Certificate<'a> {
-    pub tbs_certificate : TBSCertificate,
-    pub tbs_certificate_bytes : &'a[u8],             // provide the raw bytes for tbs_certificate for signature validation
+    // preserve raw bytes for signature validation
+    pub tbs_certificate : Constructed<'a, TBSCertificate>,
     pub signature_algorithm : AlgorithmIdentifier,
     pub signature_value : ASNBitString<'a>
 }
@@ -27,22 +38,20 @@ impl<'a> Certificate<'a> {
 
         let mut parser = Parser::new(input);
 
-        let tbs_certificate_bytes : &[u8] = parser.expect_sequence()?;
-        let tbs_certificate = TBSCertificate::parse(tbs_certificate_bytes)?;
+        let tbs_certificate = TBSCertificate::parse(parser.expect_sequence()?)?;
         let signature_algorithm : AlgorithmIdentifier = AlgorithmIdentifier::parse(parser.expect_sequence()?)?;
         let signature_value = parser.expect_bit_string()?;
 
         parser.expect_end()?;
 
-        Ok(Certificate::new(tbs_certificate, tbs_certificate_bytes, signature_algorithm, signature_value))
+        Ok(Certificate::new(tbs_certificate, signature_algorithm, signature_value))
     }
 
-    pub fn new(tbs_certificate : TBSCertificate,
-           tbs_certificate_bytes : &'a[u8],
+    pub fn new(tbs_certificate : Constructed<'a, TBSCertificate>,
            signature_algorithm : AlgorithmIdentifier,
            signature_value : ASNBitString<'a>) -> Certificate<'a> {
 
-        Certificate { tbs_certificate, tbs_certificate_bytes, signature_algorithm, signature_value }
+        Certificate { tbs_certificate, signature_algorithm, signature_value }
     }
 
 }
@@ -69,9 +78,9 @@ impl TBSCertificate {
         TBSCertificate {}
     }
 
-    fn parse(_: &[u8]) -> Result<TBSCertificate, ASNError> {
+    fn parse(bytes: &[u8]) -> Result<Constructed<TBSCertificate>, ASNError> {
         // TODO
-        Ok(TBSCertificate::new())
+        Ok(Constructed::new(bytes, TBSCertificate::new()))
     }
 }
 
