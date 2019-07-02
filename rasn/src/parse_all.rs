@@ -18,14 +18,14 @@ pub fn parse_all<'a, T : ParseHandler>(input: &'a[u8], handler: &mut T) -> Resul
             Ok(asn) => {
                 handler.on_type(&asn);
                 match asn {
-                    ASNType::Sequence(content) => {
+                    ASNType::Sequence(contents) => {
                         handler.begin_constructed();
-                        parse_all(content, handler)?;
+                        parse_all(contents, handler)?;
                         handler.end_constructed();
                     }
-                    ASNType::Set(content) => {
+                    ASNType::Set(contents) => {
                         handler.begin_constructed();
-                        parse_all(content, handler)?;
+                        parse_all(contents, handler)?;
                         handler.end_constructed();
                     }
                     _ => ()

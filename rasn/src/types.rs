@@ -54,9 +54,26 @@ impl<'a> ASNBitString<'a> {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct ASNObjectIdentifier {
+    items: Vec<u32>
+}
+
+impl ASNObjectIdentifier {
+    pub fn new(items: Vec<u32>) -> ASNObjectIdentifier {
+        ASNObjectIdentifier {
+            items
+        }
+    }
+
+    pub fn values(&self) -> &[u32] {
+        self.items.as_slice()
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum ASNType<'a> {
     Sequence(&'a[u8]),             // the interior data of the sequence
-    Set(&'a[u8]),                  // the interior data of the set
+    Set(&'a[u8]),                          // the interior data of the set
     Integer(ASNInteger<'a>),
     PrintableString(&'a str),
     IA5String(&'a str),
@@ -65,7 +82,7 @@ pub enum ASNType<'a> {
     UTCTime(chrono::DateTime<chrono::FixedOffset>),
     BitString(ASNBitString<'a>),
     OctetString(&'a[u8]),
-    ObjectIdentifier(Vec<u32>)
+    ObjectIdentifier(ASNObjectIdentifier)
 }
 
 impl<'a> std::fmt::Display for ASNType<'a> {
@@ -100,10 +117,10 @@ impl<'a> std::fmt::Display for ASNType<'a> {
             ASNType::Null => {
                 f.write_str("Null")
             },
-            ASNType::ObjectIdentifier(items) => {
+            ASNType::ObjectIdentifier(id) => {
                 f.write_str("ObjectIdentifier: ")?;
 
-                match items.split_last() {
+                match id.values().split_last() {
                     Some((last, first)) => {
                         for value in first {
                             f.write_fmt(format_args!("{}.", value))?;
@@ -132,6 +149,7 @@ impl<'a> std::fmt::Display for ASNType<'a> {
 
 #[derive(Debug, PartialEq)]
 pub enum ASNError<'a> {
+    // these errors relate to core DER parsing
     EmptySequence,
     EmptySet,
     ZeroLengthInteger,
@@ -146,7 +164,10 @@ pub enum ASNError<'a> {
     BadOidLength,
     BadUTF8(std::str::Utf8Error),
     BadUTCTime(chrono::format::ParseError, &'a str),
-    BitStringUnusedBitsTooLarge(u8)
+    BitStringUnusedBitsTooLarge(u8),
+    // these errors relate to schemas
+    EndOfStream,
+    UnexpectedType
 }
 
 impl<'a> std::fmt::Display for ASNError<'a> {
@@ -196,6 +217,12 @@ impl<'a> std::fmt::Display for ASNError<'a> {
             }
             ASNError::BitStringUnusedBitsTooLarge(unused) => {
                 f.write_fmt(format_args!("Bit string w/ unused bits outside range [0..7]: {}", unused))
+            }
+            ASNError::EndOfStream => {
+                f.write_str("Consumed all input before parsing required fields")
+            }
+            ASNError::UnexpectedType => {
+                f.write_str("Unexpected type")
             }
         }
     }

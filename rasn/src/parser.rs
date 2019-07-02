@@ -2,7 +2,7 @@
 use chrono;
 use std::str;
 
-use types::{ASNError, ASNType, ASNInteger, ASNBitString};
+use types::{ASNError, ASNType, ASNInteger, ASNBitString, ASNObjectIdentifier};
 
 #[derive(Debug, PartialEq)]
 struct ParseToken<'a, T> {
@@ -163,7 +163,7 @@ fn parse_object_identifier(contents: &[u8]) -> ASNResult {
 
     parse_remainder(&contents[1..], &mut items)?;
 
-    Ok(ASNType::ObjectIdentifier(items))
+    Ok(ASNType::ObjectIdentifier(ASNObjectIdentifier::new(items)))
 }
 
 fn parse_length(input: &[u8]) -> ParseResult<usize> {
@@ -284,6 +284,41 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     pub fn new(input: &'a[u8]) -> Parser {
         Parser { cursor: input }
+    }
+
+    pub fn expect_sequence(&mut self) -> Result<&'a[u8], ASNError<'a>> {
+        match self.next() {
+            Some(Ok(ASNType::Sequence(contents))) => Ok(contents),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Err(err)) => Err(err),
+            None => Err(ASNError::EndOfStream)
+        }
+    }
+
+    pub fn expect_object_identifier(&mut self) -> Result<ASNObjectIdentifier, ASNError<'a>> {
+        match self.next() {
+            Some(Ok(ASNType::ObjectIdentifier(id))) => Ok(id),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Err(err)) => Err(err),
+            None => Err(ASNError::EndOfStream)
+        }
+    }
+
+    pub fn expect_bit_string(&mut self) -> Result<ASNBitString<'a>, ASNError<'a>> {
+        match self.next() {
+            Some(Ok(ASNType::BitString(bs))) => Ok(bs),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Err(err)) => Err(err),
+            None => Err(ASNError::EndOfStream)
+        }
+    }
+
+    pub fn expect_end(&mut self) -> Result<(), ASNError<'a>> {
+        match self.next() {
+            None => Ok(()),
+            Some(Err(err)) => Err(err),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+        }
     }
 }
 
@@ -430,13 +465,13 @@ mod tests {
         // Microsoft: szOID_REQUEST_CLIENT_INFO
         assert_eq!(
             parse_object_identifier(&[0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x15, 0x14]),
-            Ok(ASNType::ObjectIdentifier([1, 3, 6, 1, 4, 1, 311, 21, 20].to_vec()))
+            Ok(ASNType::ObjectIdentifier(ASNObjectIdentifier::new([1, 3, 6, 1, 4, 1, 311, 21, 20].to_vec())))
         );
 
         // sha1WithRSAEncryption
         assert_eq!(
             parse_object_identifier(&[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x05]),
-            Ok(ASNType::ObjectIdentifier([1, 2, 840, 113549, 1, 1, 5].to_vec()))
+            Ok(ASNType::ObjectIdentifier(ASNObjectIdentifier::new([1, 2, 840, 113549, 1, 1, 5].to_vec())))
         );
     }
 }
