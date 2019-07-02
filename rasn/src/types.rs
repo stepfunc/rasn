@@ -168,7 +168,7 @@ impl<'a> std::fmt::Display for ASNError<'a> {
                 f.write_fmt(format_args!("Non-universal type w/ tag: {})", tag))
             }
             ASNError::UnsupportedUniversalType(tag) => {
-                f.write_fmt(format_args!("Unsupported univeral type w/ tag: {})", tag))
+                f.write_fmt(format_args!("Unsupported universal type w/ tag: {})", tag))
             }
             ASNError::InsufficientBytes(required, actual) => {
                 f.write_fmt(format_args!("Insufficient bytes, required: {} present: {}", required, actual.len()))
