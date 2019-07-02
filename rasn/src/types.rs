@@ -1,22 +1,22 @@
 extern crate chrono;
 
 #[derive(Debug, PartialEq)]
-pub struct IntegerCell<'a> {
+pub struct ASNInteger<'a> {
     bytes: &'a[u8]
 }
 
-impl<'a> IntegerCell<'a> {
+impl<'a> ASNInteger<'a> {
 
-    const VALID_LENGTHS : std::ops::Range<usize> = 1usize..4usize;
+    const VALID_I32_LENGTHS : std::ops::Range<usize> = 1usize..4usize;
 
-    pub fn new(bytes: &'a[u8]) -> IntegerCell {
-        IntegerCell{bytes}
+    pub fn new(bytes: &'a[u8]) -> ASNInteger {
+        ASNInteger{bytes}
     }
 
     fn as_i32(&self) -> Option<i32> {
 
         // can only parse values with length in [1,4] bytes
-        if !IntegerCell::VALID_LENGTHS.contains(&self.bytes.len()) {
+        if !ASNInteger::VALID_I32_LENGTHS.contains(&self.bytes.len()) {
             return None;
         }
 
@@ -30,16 +30,16 @@ impl<'a> IntegerCell<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct BitStringCell<'a> {
+pub struct ASNBitString<'a> {
     // the number of unused bits in last octet [0, 7]
     unused_bits: u8,
     // the octets, the last one only has (8 - unused_bits) bits
     bytes: &'a[u8]
 }
 
-impl<'a> BitStringCell<'a> {
-    pub fn new(unused_bits: u8, bytes: &'a[u8]) -> BitStringCell<'a> {
-        BitStringCell{ unused_bits, bytes}
+impl<'a> ASNBitString<'a> {
+    pub fn new(unused_bits: u8, bytes: &'a[u8]) -> ASNBitString<'a> {
+        ASNBitString{ unused_bits, bytes}
     }
 
     // convertible to octets if it's all full bytes
@@ -57,13 +57,13 @@ impl<'a> BitStringCell<'a> {
 pub enum ASNType<'a> {
     Sequence(&'a[u8]),             // the interior data of the sequence
     Set(&'a[u8]),                  // the interior data of the set
-    Integer(IntegerCell<'a>),
+    Integer(ASNInteger<'a>),
     PrintableString(&'a str),
     IA5String(&'a str),
     UTF8String(&'a str),
     Null,
     UTCTime(chrono::DateTime<chrono::FixedOffset>),
-    BitString(BitStringCell<'a>),
+    BitString(ASNBitString<'a>),
     OctetString(&'a[u8]),
     ObjectIdentifier(Vec<u32>)
 }

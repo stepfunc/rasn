@@ -2,7 +2,7 @@
 use chrono;
 use std::str;
 
-use types::{ASNError, ASNType, IntegerCell, BitStringCell};
+use types::{ASNError, ASNType, ASNInteger, ASNBitString};
 
 #[derive(Debug, PartialEq)]
 struct ParseToken<'a, T> {
@@ -53,7 +53,7 @@ fn parse_integer(contents: &[u8]) -> ASNResult {
         Err(ASNError::ZeroLengthInteger)
     }
     else {
-        Ok(ASNType::Integer(IntegerCell::new(contents)))
+        Ok(ASNType::Integer(ASNInteger::new(contents)))
     }
 }
 
@@ -99,7 +99,7 @@ fn parse_bit_string(contents: &[u8]) -> ASNResult {
         return Err(ASNError::BitStringUnusedBitsTooLarge(unused_bits));
     }
 
-    Ok(ASNType::BitString(BitStringCell::new(unused_bits, &contents[1..])))
+    Ok(ASNType::BitString(ASNBitString::new(unused_bits, &contents[1..])))
 }
 
 fn parse_object_identifier(contents: &[u8]) -> ASNResult {
