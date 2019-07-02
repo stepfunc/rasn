@@ -7,6 +7,8 @@ pub struct IntegerCell<'a> {
 
 impl<'a> IntegerCell<'a> {
 
+    const VALID_LENGTHS : std::ops::Range<usize> = 1usize..4usize;
+
     pub fn new(bytes: &'a[u8]) -> IntegerCell {
         IntegerCell{bytes}
     }
@@ -14,7 +16,7 @@ impl<'a> IntegerCell<'a> {
     fn as_i32(&self) -> Option<i32> {
 
         // can only parse values with length in [1,4] bytes
-        if !(1usize..4usize).contains(&self.bytes.len()) {
+        if !IntegerCell::VALID_LENGTHS.contains(&self.bytes.len()) {
             return None;
         }
 
