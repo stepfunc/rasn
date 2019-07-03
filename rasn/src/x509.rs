@@ -1,4 +1,4 @@
-use types::{ASNBitString, ASNObjectIdentifier, ASNError, ASNInteger};
+use types::{ASNBitString, ASNObjectIdentifier, ASNError, ASNInteger, ASNType};
 use parser::Parser;
 
 pub struct Constructed<'a, T> {
@@ -15,22 +15,18 @@ impl<'a, T> Constructed<'a, T> {
 pub struct Certificate<'a> {
     // preserve raw bytes for signature validation using Constructed<T>
     pub tbs_certificate : Constructed<'a, TBSCertificate<'a>>,
-    pub signature_algorithm : AlgorithmIdentifier,
+    pub signature_algorithm : AlgorithmIdentifier<'a>,
     pub signature_value : ASNBitString<'a>
 }
 
-pub struct AlgorithmIdentifier {
+pub struct AlgorithmIdentifier<'a> {
     pub algorithm : ASNObjectIdentifier,
-    pub parameters : Option<AlgorithmParameters>
-}
-
-pub enum AlgorithmParameters {
-    Ed25519
+    pub parameters : Option<ASNType<'a>>
 }
 
 pub struct TBSCertificate<'a> {
     pub serial_number : ASNInteger<'a>,
-    pub signature : AlgorithmIdentifier,
+    pub signature : AlgorithmIdentifier<'a>,
     pub issuer : Name<'a>,
     pub validity: Validity,
     pub subject : Name<'a>,
@@ -73,13 +69,13 @@ impl<'a> Name<'a> {
 }
 
 pub struct SubjectPublicKeyInfo<'a> {
-    pub algorithm: AlgorithmIdentifier,
+    pub algorithm: AlgorithmIdentifier<'a>,
     pub subject_public_key: ASNBitString<'a>
 }
 
 impl<'a> SubjectPublicKeyInfo<'a> {
 
-    fn new(algorithm: AlgorithmIdentifier, subject_public_key: ASNBitString<'a>) -> SubjectPublicKeyInfo<'a> {
+    fn new(algorithm: AlgorithmIdentifier<'a>, subject_public_key: ASNBitString<'a>) -> SubjectPublicKeyInfo<'a> {
         SubjectPublicKeyInfo { algorithm, subject_public_key}
     }
 
@@ -114,7 +110,7 @@ impl<'a> Certificate<'a> {
     }
 
     pub fn new(tbs_certificate : Constructed<'a, TBSCertificate<'a>>,
-           signature_algorithm : AlgorithmIdentifier,
+           signature_algorithm : AlgorithmIdentifier<'a>,
            signature_value : ASNBitString<'a>) -> Certificate<'a> {
 
         Certificate { tbs_certificate, signature_algorithm, signature_value }
@@ -122,20 +118,16 @@ impl<'a> Certificate<'a> {
 
 }
 
-impl AlgorithmIdentifier {
+impl<'a> AlgorithmIdentifier<'a> {
 
     fn parse(input: &[u8]) -> Result<AlgorithmIdentifier, ASNError> {
 
         let mut parser = Parser::new(input);
 
-        let value = AlgorithmIdentifier::new(parser.expect_object_identifier()?, None);
-
-        parser.expect_end()?;
-
-        Ok(value)
+        Ok(AlgorithmIdentifier::new(parser.expect_object_identifier()?, parser.expect_any_or_end()?))
     }
 
-    pub fn new(algorithm : ASNObjectIdentifier, parameters : Option<AlgorithmParameters>) -> AlgorithmIdentifier {
+    pub fn new(algorithm : ASNObjectIdentifier, parameters : Option<ASNType>) -> AlgorithmIdentifier {
         AlgorithmIdentifier { algorithm, parameters }
     }
 
@@ -145,7 +137,7 @@ impl AlgorithmIdentifier {
 impl<'a> TBSCertificate<'a> {
 
     pub fn new(serial_number : ASNInteger<'a>,
-               signature : AlgorithmIdentifier,
+               signature : AlgorithmIdentifier<'a>,
                issuer : Name<'a>,
                validity: Validity,
                subject : Name<'a>,

@@ -350,6 +350,14 @@ impl<'a> Parser<'a> {
             Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
         }
     }
+
+    pub fn expect_any_or_end(&mut self) -> Result<Option<ASNType<'a>>, ASNError<'a>> {
+        match self.next() {
+            Some(Ok(asn)) => Ok(Some(asn)),
+            Some(Err(err)) => Err(err),
+            None => Ok(None)
+        }
+    }
 }
 
 
