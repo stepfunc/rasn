@@ -101,7 +101,7 @@ pub fn main() -> Result<(), std::io::Error> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() != 3 {
-        eprintln!("requires exactly 2 arguments: decoder <der | x509> <filename>");
+        eprintln!("requires exactly 2 arguments: decoder <--der | --x509> <filename>");
         process::exit(-1);
     }
 
