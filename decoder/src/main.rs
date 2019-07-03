@@ -105,7 +105,7 @@ pub fn main() -> Result<(), std::io::Error> {
         process::exit(-1);
     }
 
-    match &*args[1] {
+    match args[1].as_str() {
         "--der" => parse_der(&get_bytes(&args[2])?),
         "--x509" => parse_x509(&get_bytes(&args[2])?),
         unknown => {
