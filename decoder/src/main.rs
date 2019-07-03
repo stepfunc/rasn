@@ -105,14 +105,12 @@ pub fn main() -> Result<(), std::io::Error> {
         process::exit(-1);
     }
 
-    if &*args[1] == "--der" {
-        return parse_der(&get_bytes(&args[2])?);
+    match &*args[1] {
+        "--der" => parse_der(&get_bytes(&args[2])?),
+        "--x509" => parse_x509(&get_bytes(&args[2])?),
+        unknown => {
+            eprintln!("Unknown flag: {}", unknown);
+            process::exit(-1);
+        }
     }
-
-    if &*args[1] == "--x509" {
-        return parse_x509(&get_bytes(&args[2])?)
-    }
-
-    eprintln!("Unknown flag: {}", args[1]);
-    process::exit(-1);
 }
