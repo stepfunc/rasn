@@ -122,8 +122,8 @@ impl<'a> TBSCertificate<'a> {
         let issuer = parser.expect_sequence()?;
         let validity = Validity::parse(parser.expect_sequence()?)?;
 
-
-        // TODO - parser.expect_end()?;
+        // TODO
+        // parser.expect_end()?;
 
         Ok(
             Constructed::new(

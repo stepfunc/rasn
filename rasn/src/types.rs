@@ -167,7 +167,7 @@ pub enum ASNError<'a> {
     BitStringUnusedBitsTooLarge(u8),
     // these errors relate to schemas
     EndOfStream,
-    UnexpectedType
+    UnexpectedType(ASNType<'a>)
 }
 
 impl<'a> std::fmt::Display for ASNError<'a> {
@@ -221,8 +221,8 @@ impl<'a> std::fmt::Display for ASNError<'a> {
             ASNError::EndOfStream => {
                 f.write_str("Consumed all input before parsing required fields")
             }
-            ASNError::UnexpectedType => {
-                f.write_str("Unexpected type")
+            ASNError::UnexpectedType(asn) => {
+                f.write_fmt(format_args!("Unexpected type: {}", asn))
             }
         }
     }

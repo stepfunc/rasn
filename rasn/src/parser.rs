@@ -298,7 +298,7 @@ impl<'a> Parser<'a> {
     pub fn expect_sequence(&mut self) -> Result<&'a[u8], ASNError<'a>> {
         match self.next() {
             Some(Ok(ASNType::Sequence(contents))) => Ok(contents),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
@@ -307,7 +307,7 @@ impl<'a> Parser<'a> {
     pub fn expect_object_identifier(&mut self) -> Result<ASNObjectIdentifier, ASNError<'a>> {
         match self.next() {
             Some(Ok(ASNType::ObjectIdentifier(id))) => Ok(id),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
@@ -318,7 +318,7 @@ impl<'a> Parser<'a> {
             Some(Ok(ASNType::Integer(x))) => Ok(x),
             Some(Ok(asn)) => {
                 println!("expected integer, but type is: {}", asn);
-                Err(ASNError::UnexpectedType)
+                Err(ASNError::UnexpectedType(asn))
             },
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
@@ -328,7 +328,7 @@ impl<'a> Parser<'a> {
     pub fn expect_bit_string(&mut self) -> Result<ASNBitString<'a>, ASNError<'a>> {
         match self.next() {
             Some(Ok(ASNType::BitString(bs))) => Ok(bs),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
@@ -337,7 +337,7 @@ impl<'a> Parser<'a> {
     pub fn expect_utc_time(&mut self) -> Result<DateTime<FixedOffset>, ASNError<'a>> {
         match self.next() {
             Some(Ok(ASNType::UTCTime(time))) => Ok(time),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
@@ -347,7 +347,7 @@ impl<'a> Parser<'a> {
         match self.next() {
             None => Ok(()),
             Some(Err(err)) => Err(err),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
         }
     }
 }
