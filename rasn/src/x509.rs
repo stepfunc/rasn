@@ -49,13 +49,9 @@ impl Validity {
 
     fn parse(input: &[u8]) -> Result<Validity, ASNError> {
         let mut parser = Parser::new(input);
-
-        let not_before = parser.expect_utc_time()?;
-        let not_after = parser.expect_utc_time()?;
-
+        let value = Validity::new( parser.expect_utc_time()?,  parser.expect_utc_time()?);
         parser.expect_end()?;
-
-        Ok(Validity::new(not_before, not_after))
+        Ok(value)
     }
 }
 
@@ -64,13 +60,15 @@ impl<'a> Certificate<'a> {
     pub fn parse(input: &[u8]) -> Result<Certificate, ASNError> {
         let mut parser = Parser::unwrap_outer_sequence(input)?;
 
-        let tbs_certificate = TBSCertificate::parse(parser.expect_sequence()?)?;
-        let signature_algorithm : AlgorithmIdentifier = AlgorithmIdentifier::parse(parser.expect_sequence()?)?;
-        let signature_value = parser.expect_bit_string()?;
+        let value = Certificate::new(
+            TBSCertificate::parse(parser.expect_sequence()?)?,
+            AlgorithmIdentifier::parse(parser.expect_sequence()?)?,
+            parser.expect_bit_string()?
+        );
 
         parser.expect_end()?;
 
-        Ok(Certificate::new(tbs_certificate, signature_algorithm, signature_value))
+        Ok(value)
     }
 
     pub fn new(tbs_certificate : Constructed<'a, TBSCertificate<'a>>,
@@ -87,13 +85,12 @@ impl AlgorithmIdentifier {
     fn parse(input: &[u8]) -> Result<AlgorithmIdentifier, ASNError> {
 
         let mut parser = Parser::new(input);
-        let algorithm = parser.expect_object_identifier()?;
 
-        // TODO - identify the algorithm
+        let value = AlgorithmIdentifier::new(parser.expect_object_identifier()?, None);
 
         parser.expect_end()?;
 
-        Ok(AlgorithmIdentifier::new(algorithm, None))
+        Ok(value)
     }
 
     pub fn new(algorithm : ASNObjectIdentifier, parameters : Option<AlgorithmParameters>) -> AlgorithmIdentifier {
@@ -116,21 +113,20 @@ impl<'a> TBSCertificate<'a> {
 
         let mut parser = Parser::new(input);
 
-        let serial_number = parser.expect_integer()?;
-
-        let signature = AlgorithmIdentifier::parse(parser.expect_sequence()?)?;
-        let issuer = parser.expect_sequence()?;
-        let validity = Validity::parse(parser.expect_sequence()?)?;
+        let tbs_certificate = Constructed::new(
+            input,
+            TBSCertificate::new(
+                parser.expect_integer()?,
+                AlgorithmIdentifier::parse(parser.expect_sequence()?)?,
+                parser.expect_sequence()?,
+                Validity::parse(parser.expect_sequence()?)?
+            )
+        );
 
         // TODO
         // parser.expect_end()?;
 
-        Ok(
-            Constructed::new(
-                input,
-                TBSCertificate::new(serial_number, signature, issuer, validity)
-            )
-        )
+        Ok(tbs_certificate)
     }
 }
 
