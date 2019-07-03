@@ -1,6 +1,7 @@
 use types::{ASNBitString, ASNObjectIdentifier, ASNError, ASNInteger, ASNType};
 use parser::Parser;
 
+#[derive(Debug)]
 pub struct Constructed<'a, T> {
     pub bytes: &'a[u8],
     pub value: T
@@ -12,6 +13,7 @@ impl<'a, T> Constructed<'a, T> {
     }
 }
 
+#[derive(Debug)]
 pub struct Certificate<'a> {
     // preserve raw bytes for signature validation using Constructed<T>
     pub tbs_certificate : Constructed<'a, TBSCertificate<'a>>,
@@ -19,11 +21,13 @@ pub struct Certificate<'a> {
     pub signature_value : ASNBitString<'a>
 }
 
+#[derive(Debug)]
 pub struct AlgorithmIdentifier<'a> {
     pub algorithm : ASNObjectIdentifier,
     pub parameters : Option<ASNType<'a>>
 }
 
+#[derive(Debug)]
 pub struct TBSCertificate<'a> {
     pub serial_number : ASNInteger<'a>,
     pub signature : AlgorithmIdentifier<'a>,
@@ -35,6 +39,7 @@ pub struct TBSCertificate<'a> {
 
 type Time = chrono::DateTime<chrono::FixedOffset>;
 
+#[derive(Debug)]
 pub struct Validity {
     pub not_before : Time,
     pub not_after : Time
@@ -53,6 +58,7 @@ impl Validity {
     }
 }
 
+#[derive(Debug)]
 pub struct Name<'a> {
     pub contents: &'a [u8]
 }
@@ -68,6 +74,7 @@ impl<'a> Name<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct SubjectPublicKeyInfo<'a> {
     pub algorithm: AlgorithmIdentifier<'a>,
     pub subject_public_key: ASNBitString<'a>

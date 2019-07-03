@@ -87,8 +87,7 @@ pub fn main() -> Result<(), std::io::Error> {
     fn parse_x509(bytes: &[u8]) -> Result<(), std::io::Error> {
         match Certificate::parse(bytes) {
             Ok(cert) => {
-                println!("not before: {}", cert.tbs_certificate.value.validity.not_before);
-                println!("not after: {}", cert.tbs_certificate.value.validity.not_after);
+                println!("{:#?}", cert);
             }
             Err(err) => {
                 eprintln!("Error: {}", err);
