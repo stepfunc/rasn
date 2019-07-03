@@ -283,8 +283,16 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+
     pub fn new(input: &'a[u8]) -> Parser {
         Parser { cursor: input }
+    }
+
+    pub fn unwrap_outer_sequence(input: &'a[u8]) -> Result<Parser, ASNError> {
+        let mut parser = Parser::new(input);
+        let bytes = parser.expect_sequence()?;
+        parser.expect_end()?;
+        Ok(Parser::new(bytes))
     }
 
     pub fn expect_sequence(&mut self) -> Result<&'a[u8], ASNError<'a>> {
@@ -308,7 +316,10 @@ impl<'a> Parser<'a> {
     pub fn expect_integer(&mut self) -> Result<ASNInteger<'a>, ASNError<'a>> {
         match self.next() {
             Some(Ok(ASNType::Integer(x))) => Ok(x),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => {
+                println!("expected integer, but type is: {}", asn);
+                Err(ASNError::UnexpectedType)
+            },
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }

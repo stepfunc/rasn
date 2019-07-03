@@ -7,6 +7,7 @@ use std::fs::File;
 
 use rasn::types::{ASNType, ASNError};
 use rasn::parse_all::{ParseHandler, parse_all};
+use rasn::x509::Certificate;
 
 struct ParsePrinter {
     indent: usize
@@ -67,27 +68,51 @@ impl ParseHandler for ParsePrinter {
     }
 }
 
+fn get_bytes(file: &String) -> Result<Vec<u8>, std::io::Error> {
+    let mut f = File::open(file)?;
+    let mut vec : Vec<u8> = Vec::new();
+    f.read_to_end(&mut vec)?;
+    Ok(vec)
+}
+
 pub fn main() -> Result<(), std::io::Error> {
+
+    fn parse_der(bytes: &[u8]) -> Result<(), std::io::Error> {
+        parse_all(bytes, &mut ParsePrinter::new()).or_else( |err| {
+            eprintln!("Error: {}", err);
+            Ok(())
+        })
+    }
+
+    fn parse_x509(bytes: &[u8]) -> Result<(), std::io::Error> {
+        match Certificate::parse(bytes) {
+            Ok(cert) => {
+                println!("not before: {}", cert.tbs_certificate.value.validity.not_before);
+                println!("not after: {}", cert.tbs_certificate.value.validity.not_after);
+            }
+            Err(err) => {
+                eprintln!("Error: {}", err);
+            }
+        };
+
+        Ok(())
+    }
 
     let args: Vec<String> = env::args().collect();
 
-    if args.len() != 2 {
-        eprintln!("requires exactly one argument!");
+    if args.len() != 3 {
+        eprintln!("requires exactly 2 arguments: decoder <der | x509> <filename>");
         process::exit(-1);
     }
 
-    let mut f = File::open(&args[1])?;
-
-    let mut vec : Vec<u8> = Vec::new();
-
-    f.read_to_end(&mut vec)?;
-
-    match parse_all(&vec, &mut ParsePrinter::new()) {
-        Err(err) => {
-            eprintln!("{}", err);
-            process::exit(-1);
-        }
-        Ok(()) => Ok(())
+    if &*args[1] == "--der" {
+        return parse_der(&get_bytes(&args[2])?);
     }
 
+    if &*args[1] == "--x509" {
+        return parse_x509(&get_bytes(&args[2])?)
+    }
+
+    eprintln!("Unknown flag: {}", args[1]);
+    process::exit(-1);
 }

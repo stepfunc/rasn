@@ -62,8 +62,7 @@ impl Validity {
 impl<'a> Certificate<'a> {
 
     pub fn parse(input: &[u8]) -> Result<Certificate, ASNError> {
-
-        let mut parser = Parser::new(input);
+        let mut parser = Parser::unwrap_outer_sequence(input)?;
 
         let tbs_certificate = TBSCertificate::parse(parser.expect_sequence()?)?;
         let signature_algorithm : AlgorithmIdentifier = AlgorithmIdentifier::parse(parser.expect_sequence()?)?;
@@ -118,9 +117,13 @@ impl<'a> TBSCertificate<'a> {
         let mut parser = Parser::new(input);
 
         let serial_number = parser.expect_integer()?;
+
         let signature = AlgorithmIdentifier::parse(parser.expect_sequence()?)?;
         let issuer = parser.expect_sequence()?;
         let validity = Validity::parse(parser.expect_sequence()?)?;
+
+
+        // TODO - parser.expect_end()?;
 
         Ok(
             Constructed::new(
