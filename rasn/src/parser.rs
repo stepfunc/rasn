@@ -203,11 +203,7 @@ fn parse_one_type(input: &[u8]) -> ParseResult<ASNType> {
 
     let length = parse_length(&mut reader)?;
 
-    if length > reader.remainder().len() {
-        return Err(ASNError::InsufficientBytes(length, reader.remainder().len()))
-    }
-
-    let contents = &reader.remainder()[0..length];
+    let contents = reader.take(length)?;
 
     let result = match typ & 0b00111111 {
 
@@ -229,7 +225,7 @@ fn parse_one_type(input: &[u8]) -> ParseResult<ASNType> {
         x => Err(ASNError::UnsupportedUniversalType(x))
     };
 
-    result.map(|value| ParseToken::new(value, &reader.remainder()[length..]))
+    result.map(|value| ParseToken::new(value, reader.remainder()))
 }
 
 pub struct Parser<'a> {
@@ -430,7 +426,7 @@ mod tests {
 
     #[test]
     fn parse_sequence_fails_if_insufficient_bytes() {
-        assert_eq!(parse_one_type(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ASNError::InsufficientBytes(0x0F, 2)));
+        assert_eq!(parse_one_type(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ASNError::EndOfStream));
     }
 
     #[test]
