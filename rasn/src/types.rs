@@ -161,8 +161,8 @@ pub enum ASNError<'a> {
     InsufficientBytes(usize, &'a[u8]),   // the required length and the actual remaining bytes
     UnsupportedIndefiniteLength,
     ReservedLengthValue,
-    UnsupportedLengthByteCount(u8),
-    BadLengthEncoding(u8),
+    UnsupportedLengthByteCount(usize),
+    BadLengthEncoding(usize),
     BadOidLength,
     BadUTF8(std::str::Utf8Error),
     BadUTCTime(chrono::format::ParseError, &'a str),

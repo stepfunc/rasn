@@ -149,44 +149,15 @@ fn parse_object_identifier(contents: &[u8]) -> ASNResult {
 
 fn parse_length(input: &[u8]) -> ParseResult<usize> {
 
-    fn decode_one(input: &[u8]) -> ParseResult<usize> {
-        let value = input[0];
+    let mut reader = Reader::new(input);
 
-        if value == 0 {
-            return Err(ASNError::UnsupportedIndefiniteLength)
-        }
+    let first_byte = reader.read_byte()?;
 
-        if value < 128 {
-            return Err(ASNError::BadLengthEncoding(value)) // should have been encoded in single byte
-        }
-
-        parse_ok(value as usize, &input[1..])
-    }
-
-    fn decode_two(input: &[u8]) -> ParseResult<usize> {
-        let value = (input[0] as usize) << 8 | input[1] as usize;
-        parse_ok(value, &input[2..])
-    }
-
-    fn decode_three(input: &[u8]) -> ParseResult<usize> {
-        let value = ((input[0] as usize) << 16) | ((input[1] as usize) << 8) | (input[2] as usize);
-        parse_ok(value, &input[3..])
-    }
-
-    fn decode_four(input: &[u8]) -> ParseResult<usize> {
-        let value = ((input[0] as usize) << 24) | ((input[1] as usize) << 16) | ((input[2] as usize) << 8) | (input[3] as usize);
-        parse_ok(value, &input[4..])
-    }
-
-    if input.len() < 1 {
-        return Err(ASNError::InsufficientBytes(1, input))
-    }
-
-    let top_bit = input[0] & 0b10000000;
-    let count_of_bytes = input[0] & 0b01111111;
+    let top_bit = first_byte & 0b10000000;
+    let count_of_bytes = (first_byte & 0b01111111) as usize;
 
     if top_bit == 0 {
-        parse_ok(count_of_bytes as usize, &input[1..])
+        parse_ok(count_of_bytes, reader.remainder())
     }
     else {
 
@@ -198,19 +169,26 @@ fn parse_length(input: &[u8]) -> ParseResult<usize> {
             return Err(ASNError::ReservedLengthValue)
         }
 
-        let remainder = &input[1..];
-
-        if remainder.len() < count_of_bytes as usize {
-            return Err(ASNError::InsufficientBytes(count_of_bytes as usize, remainder))
+        if count_of_bytes < 1 || count_of_bytes > 4 {
+            return Err(ASNError::UnsupportedLengthByteCount(count_of_bytes))
         }
 
-        match count_of_bytes {
-            1 => decode_one(remainder),
-            2 => decode_two(remainder),
-            3 => decode_three(remainder),
-            4 => decode_four(remainder),
-            _ => Err(ASNError::UnsupportedLengthByteCount(count_of_bytes))
+        let mut value : usize = 0;
+
+        for _ in 0 .. count_of_bytes {
+            value <<= 8;
+            value |= reader.read_byte()? as usize;
         }
+
+        if value == 0 {
+            return Err(ASNError::UnsupportedIndefiniteLength)
+        }
+
+        if value < 128 {
+            return Err(ASNError::BadLengthEncoding(value)) // should have been encoded in single byte
+        }
+
+        parse_ok(value , reader.remainder())
     }
 }
 
@@ -378,7 +356,7 @@ mod tests {
 
     #[test]
     fn decode_length_on_empty_bytes_fails() {
-        assert_eq!(parse_length(&[]), Err(ASNError::InsufficientBytes(1, &[])))
+        assert_eq!(parse_length(&[]), Err(ASNError::EndOfStream))
     }
 
     #[test]
