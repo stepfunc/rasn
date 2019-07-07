@@ -59,18 +59,80 @@ impl Validity {
 }
 
 #[derive(Debug)]
+pub struct AttributeTypeAndValue<'a> {
+    pub id : ASNObjectIdentifier,
+    pub value : ASNType<'a>
+}
+
+impl<'a> AttributeTypeAndValue<'a> {
+
+    fn new(id : ASNObjectIdentifier, value : ASNType<'a>) -> AttributeTypeAndValue<'a> {
+        AttributeTypeAndValue { id, value}
+    }
+
+    fn parse(input: &'a [u8]) -> Result<AttributeTypeAndValue<'a>, ASNError> {
+        let mut parser = Parser::new(input);
+
+        let value = AttributeTypeAndValue::new(
+            parser.expect_object_identifier()?,
+              parser.expect_any()?
+        );
+
+        parser.expect_end()?;
+
+        Ok(value)
+    }
+}
+
+#[derive(Debug)]
+pub struct RelativeDistinguishedName<'a> {
+    values : Vec<AttributeTypeAndValue<'a>>
+}
+
+impl<'a> RelativeDistinguishedName<'a> {
+
+    fn new(values: Vec<AttributeTypeAndValue<'a>>) -> RelativeDistinguishedName<'a> {
+        RelativeDistinguishedName { values }
+    }
+
+    fn parse(input: &'a [u8]) -> Result<RelativeDistinguishedName<'a>, ASNError> {
+
+        let mut parser = Parser::new(input);
+
+        let mut entries : Vec<AttributeTypeAndValue> = Vec::new();
+
+        // expect at least one entry!
+        entries.push(AttributeTypeAndValue::parse(parser.expect_sequence()?)?);
+
+        while !parser.is_empty() {
+            entries.push(AttributeTypeAndValue::parse(parser.expect_sequence()?)?);
+        }
+
+        Ok(RelativeDistinguishedName::new(entries))
+    }
+}
+
+#[derive(Debug)]
 pub struct Name<'a> {
-    pub contents: &'a [u8]
+    pub values: Vec<RelativeDistinguishedName<'a>>
 }
 
 impl<'a> Name<'a> {
-
-    fn new(contents: &'a [u8]) -> Name<'a> {
-        Name { contents}
+    fn new(values: Vec<RelativeDistinguishedName<'a>>) -> Name<'a> {
+        Name { values }
     }
 
     fn parse(input: &[u8]) -> Result<Name, ASNError> {
-        Ok(Name::new(input))
+
+        let mut parser = Parser::new(input);
+
+        let mut values : Vec<RelativeDistinguishedName> = Vec::new();
+
+        while !parser.is_empty() {
+            values.push( RelativeDistinguishedName::parse(parser.expect_set()?)?);
+        }
+
+        Ok(Name::new(values))
     }
 }
 

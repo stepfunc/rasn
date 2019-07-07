@@ -3,7 +3,7 @@ use chrono;
 use std::str;
 
 use reader::Reader;
-use types::{ASNError, ASNType, ASNInteger, ASNBitString, ASNObjectIdentifier};
+use types::{ASNError, ASNType, ASNInteger, ASNBitString, ASNObjectIdentifier, ASNTypeId};
 use chrono::{DateTime, FixedOffset};
 
 type ASNResult<'a> = Result<ASNType<'a>, ASNError>;
@@ -221,10 +221,30 @@ impl<'a> Parser<'a> {
         Ok(Parser::new(bytes))
     }
 
+    pub fn unwrap_outer_set(input: &'a[u8]) -> Result<Parser, ASNError> {
+        let mut parser = Parser::new(input);
+        let bytes = parser.expect_set()?;
+        parser.expect_end()?;
+        Ok(Parser::new(bytes))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.reader.is_empty()
+    }
+
     pub fn expect_sequence(&mut self) -> Result<&'a[u8], ASNError> {
         match self.next() {
             Some(Ok(ASNType::Sequence(contents))) => Ok(contents),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Sequence, asn.get_id())),
+            Some(Err(err)) => Err(err),
+            None => Err(ASNError::EndOfStream)
+        }
+    }
+
+    pub fn expect_set(&mut self) -> Result<&'a[u8], ASNError> {
+        match self.next() {
+            Some(Ok(ASNType::Set(contents))) => Ok(contents),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Set, asn.get_id())),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
@@ -233,7 +253,7 @@ impl<'a> Parser<'a> {
     pub fn expect_object_identifier(&mut self) -> Result<ASNObjectIdentifier, ASNError> {
         match self.next() {
             Some(Ok(ASNType::ObjectIdentifier(id))) => Ok(id),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::ObjectIdentifier,asn.get_id())),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
@@ -242,7 +262,7 @@ impl<'a> Parser<'a> {
     pub fn expect_integer(&mut self) -> Result<ASNInteger<'a>, ASNError> {
         match self.next() {
             Some(Ok(ASNType::Integer(x))) => Ok(x),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Integer, asn.get_id())),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
@@ -251,7 +271,7 @@ impl<'a> Parser<'a> {
     pub fn expect_bit_string(&mut self) -> Result<ASNBitString<'a>, ASNError> {
         match self.next() {
             Some(Ok(ASNType::BitString(bs))) => Ok(bs),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::BitString, asn.get_id())),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
@@ -260,7 +280,7 @@ impl<'a> Parser<'a> {
     pub fn expect_utc_time(&mut self) -> Result<DateTime<FixedOffset>, ASNError> {
         match self.next() {
             Some(Ok(ASNType::UTCTime(time))) => Ok(time),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::UTCTime, asn.get_id())),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
@@ -270,7 +290,15 @@ impl<'a> Parser<'a> {
         match self.next() {
             None => Ok(()),
             Some(Err(err)) => Err(err),
-            Some(Ok(_)) => Err(ASNError::UnexpectedType),
+            Some(Ok(asn)) => Err(ASNError::ExpectedEnd(asn.get_id())),
+        }
+    }
+
+    pub fn expect_any(&mut self) -> Result<ASNType<'a>, ASNError> {
+        match self.next() {
+            Some(Ok(asn)) => Ok(asn),
+            Some(Err(err)) => Err(err),
+            None => Err(ASNError::EndOfStream)
         }
     }
 

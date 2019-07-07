@@ -87,6 +87,41 @@ pub enum ASNType<'a> {
     ObjectIdentifier(ASNObjectIdentifier)
 }
 
+// An identifier for the type that carries no data
+// used for error purposes
+#[derive(Debug, PartialEq)]
+pub enum ASNTypeId {
+    Sequence,
+    Set,
+    Integer,
+    PrintableString,
+    IA5String,
+    UTF8String,
+    Null,
+    UTCTime,
+    BitString,
+    OctetString,
+    ObjectIdentifier
+}
+
+impl<'a> ASNType<'a> {
+    pub fn get_id(&self) -> ASNTypeId {
+        match self {
+            ASNType::Sequence(_) => ASNTypeId::Sequence,
+            ASNType::Set(_) => ASNTypeId::Set,
+            ASNType::Integer(_) => ASNTypeId::Integer,
+            ASNType::PrintableString(_) => ASNTypeId::PrintableString,
+            ASNType::IA5String(_) => ASNTypeId::IA5String,
+            ASNType::UTF8String(_) => ASNTypeId::UTF8String,
+            ASNType::Null => ASNTypeId::Null,
+            ASNType::UTCTime(_) => ASNTypeId::UTCTime,
+            ASNType::BitString(_) => ASNTypeId::BitString,
+            ASNType::OctetString(_) => ASNTypeId::OctetString,
+            ASNType::ObjectIdentifier(_) => ASNTypeId::ObjectIdentifier
+        }
+    }
+}
+
 impl<'a> std::fmt::Display for ASNType<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -168,7 +203,8 @@ pub enum ASNError {
     BadUTCTime(chrono::format::ParseError),
     BitStringUnusedBitsTooLarge(u8),
     // these errors relate to schemas
-    UnexpectedType
+    UnexpectedType(ASNTypeId, ASNTypeId),  // the expected type followed by the actual type
+    ExpectedEnd(ASNTypeId)                 // type present instead of end
 }
 
 impl std::convert::From<reader::EndOfStream> for ASNError {
@@ -231,8 +267,11 @@ impl std::fmt::Display for ASNError {
             ASNError::EndOfStream => {
                 f.write_str("Consumed all input before parsing required fields")
             }
-            ASNError::UnexpectedType => {
-                f.write_str("Unexpected type")
+            ASNError::UnexpectedType(expected, actual) => {
+                f.write_fmt(format_args!("Expected {:?}, but type is {:?}", expected, actual))
+            }
+            ASNError::ExpectedEnd(actual) => {
+                f.write_fmt(format_args!("Expected end of stream but type is {:?}", actual))
             }
         }
     }
