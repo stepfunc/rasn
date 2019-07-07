@@ -8,7 +8,7 @@ pub trait ParseHandler {
     fn on_error(&mut self, err: &ASNError) -> ();
 }
 
-pub fn parse_all<'a, T : ParseHandler>(input: &'a[u8], handler: &mut T) -> Result<(), ASNError<'a>> {
+pub fn parse_all<T : ParseHandler>(input: &[u8], handler: &mut T) -> Result<(), ASNError> {
     for result in Parser::new(input) {
         match result {
             Err(err) => {

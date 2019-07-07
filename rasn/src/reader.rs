@@ -1,8 +1,7 @@
 
 
 pub struct Reader<'a> {
-    bytes : &'a [u8],
-    count : usize
+    bytes : &'a [u8]
 }
 
 #[derive(Debug)]
@@ -13,7 +12,7 @@ pub enum InputError {
 impl<'a> Reader<'a> {
 
     pub fn new(bytes : &'a [u8]) -> Reader {
-        Reader{ bytes, count: 0 }
+        Reader{ bytes }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -29,7 +28,6 @@ impl<'a> Reader<'a> {
             Err(InputError::EndOfStream)
         }
         else {
-            self.count += 1;
             let value: u8 = self.bytes[0];
             self.bytes = &self.bytes[1..];
             Ok(value)
@@ -42,7 +40,6 @@ impl<'a> Reader<'a> {
         }
         else {
             let ret = &self.bytes[0..count];
-            self.count += count;
             self.bytes = &self.bytes[count..];
             Ok(ret)
         }

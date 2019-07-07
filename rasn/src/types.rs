@@ -150,35 +150,35 @@ impl<'a> std::fmt::Display for ASNType<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum ASNError<'a> {
+pub enum ASNError {
     // these errors relate to core DER parsing
     EmptySequence,
     EmptySet,
     ZeroLengthInteger,
-    NullWithNonEmptyContents(&'a[u8]),
+    NullWithNonEmptyContents(usize),
     NonUniversalType(u8),
     UnsupportedUniversalType(u8),
-    InsufficientBytes(usize, &'a[u8]),   // the required length and the actual remaining bytes
+    InsufficientBytes(usize, usize),   // the required length and the actual remaining bytes
     UnsupportedIndefiniteLength,
     ReservedLengthValue,
     UnsupportedLengthByteCount(usize),
     BadLengthEncoding(usize),
     BadOidLength,
     BadUTF8(std::str::Utf8Error),
-    BadUTCTime(chrono::format::ParseError, &'a str),
+    BadUTCTime(chrono::format::ParseError),
     BitStringUnusedBitsTooLarge(u8),
     // these errors relate to schemas
     EndOfStream,
-    UnexpectedType(ASNType<'a>)
+    UnexpectedType
 }
 
-impl<'a> std::convert::From<reader::InputError> for ASNError<'a> {
+impl std::convert::From<reader::InputError> for ASNError {
     fn from(_: reader::InputError) -> Self {
         ASNError::EndOfStream
     }
 }
 
-impl<'a> std::fmt::Display for ASNError<'a> {
+impl std::fmt::Display for ASNError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             ASNError::EmptySequence => {
@@ -190,8 +190,8 @@ impl<'a> std::fmt::Display for ASNError<'a> {
             ASNError::ZeroLengthInteger => {
                 f.write_str("zero length integer")
             }
-            ASNError::NullWithNonEmptyContents(contents) => {
-                f.write_fmt(format_args!("NULL type w/ non-empty contents (length == {})", contents.len()))
+            ASNError::NullWithNonEmptyContents(length) => {
+                f.write_fmt(format_args!("NULL type w/ non-empty contents (length == {})", length))
             }
             ASNError::NonUniversalType(tag) => {
                 f.write_fmt(format_args!("Non-universal type w/ tag: {})", tag))
@@ -200,7 +200,7 @@ impl<'a> std::fmt::Display for ASNError<'a> {
                 f.write_fmt(format_args!("Unsupported universal type w/ tag: {})", tag))
             }
             ASNError::InsufficientBytes(required, actual) => {
-                f.write_fmt(format_args!("Insufficient bytes, required: {} present: {}", required, actual.len()))
+                f.write_fmt(format_args!("Insufficient bytes, required: {} present: {}", required, actual))
             }
             ASNError::UnsupportedIndefiniteLength => {
                 f.write_str("Encountered indefinite length encoding. Not allowed in DER.")
@@ -220,8 +220,8 @@ impl<'a> std::fmt::Display for ASNError<'a> {
             ASNError::BadUTF8(err) => {
                 f.write_fmt(format_args!("Bad UTF8 encoding: {}", err))
             }
-            ASNError::BadUTCTime(err, str) => {
-                f.write_fmt(format_args!("Bad UTC time string ({}): {}", str, err))
+            ASNError::BadUTCTime(err) => {
+                f.write_fmt(format_args!("Bad UTC time string: {}", err))
             }
             ASNError::BitStringUnusedBitsTooLarge(unused) => {
                 f.write_fmt(format_args!("Bit string w/ unused bits outside range [0..7]: {}", unused))
@@ -229,8 +229,8 @@ impl<'a> std::fmt::Display for ASNError<'a> {
             ASNError::EndOfStream => {
                 f.write_str("Consumed all input before parsing required fields")
             }
-            ASNError::UnexpectedType(asn) => {
-                f.write_fmt(format_args!("Unexpected type: {}", asn))
+            ASNError::UnexpectedType => {
+                f.write_str("Unexpected type")
             }
         }
     }

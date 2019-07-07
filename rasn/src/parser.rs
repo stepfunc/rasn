@@ -18,8 +18,8 @@ impl<'a, T> ParseToken<'a, T> {
     }
 }
 
-type ParseResult<'a, T> = Result<ParseToken<'a, T>, ASNError<'a>>;
-type ASNResult<'a> = Result<ASNType<'a>, ASNError<'a>>;
+type ParseResult<'a, T> = Result<ParseToken<'a, T>, ASNError>;
+type ASNResult<'a> = Result<ASNType<'a>, ASNError>;
 
 fn parse_ok<T>(value : T,  remainder: &[u8]) -> ParseResult<T> {
     Ok(ParseToken { value, remainder })
@@ -46,7 +46,7 @@ fn parse_null(contents: &[u8]) -> ASNResult {
         Ok(ASNType::Null)
     }
     else {
-        Err(ASNError::NullWithNonEmptyContents(contents))
+        Err(ASNError::NullWithNonEmptyContents(contents.len()))
     }
 }
 
@@ -78,7 +78,7 @@ fn parse_utc_time(contents: &[u8]) -> ASNResult {
     match str::from_utf8(contents) {
         Ok(s) => match try_parse_all_variants(s){
             Ok(time) => Ok(ASNType::UTCTime(time)),
-            Err(err) => Err(ASNError::BadUTCTime(err, s))
+            Err(err) => Err(ASNError::BadUTCTime(err))
         }
         Err(x) => Err(ASNError::BadUTF8(x))
     }
@@ -93,7 +93,7 @@ fn parse_string<T : Fn(&str) -> ASNType>(contents: &[u8], create: T) -> ASNResul
 
 fn parse_bit_string(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
-        return Err(ASNError::InsufficientBytes(0, contents))
+        return Err(ASNError::InsufficientBytes(0, contents.len()))
     }
 
     let unused_bits = contents[0];
@@ -106,7 +106,7 @@ fn parse_bit_string(contents: &[u8]) -> ASNResult {
 
 fn parse_object_identifier(contents: &[u8]) -> ASNResult {
 
-    fn parse_one<'a>(reader: &mut Reader) -> Result<u32, ASNError<'a>> {
+    fn parse_one<'a>(reader: &mut Reader) -> Result<u32, ASNError> {
         let mut sum : u32 = 0;
         let mut count: u32 = 0;
         loop {
@@ -147,9 +147,7 @@ fn parse_object_identifier(contents: &[u8]) -> ASNResult {
     Ok(ASNType::ObjectIdentifier(ASNObjectIdentifier::new(items)))
 }
 
-fn parse_length(input: &[u8]) -> ParseResult<usize> {
-
-    let mut reader = Reader::new(input);
+fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
 
     let first_byte = reader.read_byte()?;
 
@@ -157,7 +155,7 @@ fn parse_length(input: &[u8]) -> ParseResult<usize> {
     let count_of_bytes = (first_byte & 0b01111111) as usize;
 
     if top_bit == 0 {
-        parse_ok(count_of_bytes, reader.remainder())
+        Ok(count_of_bytes)
     }
     else {
 
@@ -188,30 +186,28 @@ fn parse_length(input: &[u8]) -> ParseResult<usize> {
             return Err(ASNError::BadLengthEncoding(value)) // should have been encoded in single byte
         }
 
-        parse_ok(value , reader.remainder())
+        Ok(value)
     }
 }
 
 fn parse_one_type(input: &[u8]) -> ParseResult<ASNType> {
 
-    if input.len() < 1 {
-        return Err(ASNError::InsufficientBytes(2, input))
-    }
+    let mut reader = Reader::new(input);
 
-    let typ : u8 = input[0];
+    let typ : u8 = reader.read_byte()?;
 
     if typ & 0b11000000 != 0 {
         // non-universal type
         return Err(ASNError::NonUniversalType(typ))
     }
 
-    let length = parse_length(&input[1..])?;
+    let length = parse_length(&mut reader)?;
 
-    if length.value > length.remainder.len() {
-        return Err(ASNError::InsufficientBytes(length.value, length.remainder))
+    if length > reader.remainder().len() {
+        return Err(ASNError::InsufficientBytes(length, reader.remainder().len()))
     }
 
-    let contents = &length.remainder[0..length.value];
+    let contents = &reader.remainder()[0..length];
 
     let result = match typ & 0b00111111 {
 
@@ -233,7 +229,7 @@ fn parse_one_type(input: &[u8]) -> ParseResult<ASNType> {
         x => Err(ASNError::UnsupportedUniversalType(x))
     };
 
-    result.map(|value| ParseToken::new(value, &length.remainder[length.value..]))
+    result.map(|value| ParseToken::new(value, &reader.remainder()[length..]))
 }
 
 pub struct Parser<'a> {
@@ -253,63 +249,60 @@ impl<'a> Parser<'a> {
         Ok(Parser::new(bytes))
     }
 
-    pub fn expect_sequence(&mut self) -> Result<&'a[u8], ASNError<'a>> {
+    pub fn expect_sequence(&mut self) -> Result<&'a[u8], ASNError> {
         match self.next() {
             Some(Ok(ASNType::Sequence(contents))) => Ok(contents),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
     }
 
-    pub fn expect_object_identifier(&mut self) -> Result<ASNObjectIdentifier, ASNError<'a>> {
+    pub fn expect_object_identifier(&mut self) -> Result<ASNObjectIdentifier, ASNError> {
         match self.next() {
             Some(Ok(ASNType::ObjectIdentifier(id))) => Ok(id),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
     }
 
-    pub fn expect_integer(&mut self) -> Result<ASNInteger<'a>, ASNError<'a>> {
+    pub fn expect_integer(&mut self) -> Result<ASNInteger<'a>, ASNError> {
         match self.next() {
             Some(Ok(ASNType::Integer(x))) => Ok(x),
-            Some(Ok(asn)) => {
-                println!("expected integer, but type is: {}", asn);
-                Err(ASNError::UnexpectedType(asn))
-            },
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
     }
 
-    pub fn expect_bit_string(&mut self) -> Result<ASNBitString<'a>, ASNError<'a>> {
+    pub fn expect_bit_string(&mut self) -> Result<ASNBitString<'a>, ASNError> {
         match self.next() {
             Some(Ok(ASNType::BitString(bs))) => Ok(bs),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
     }
 
-    pub fn expect_utc_time(&mut self) -> Result<DateTime<FixedOffset>, ASNError<'a>> {
+    pub fn expect_utc_time(&mut self) -> Result<DateTime<FixedOffset>, ASNError> {
         match self.next() {
             Some(Ok(ASNType::UTCTime(time))) => Ok(time),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }
     }
 
-    pub fn expect_end(&mut self) -> Result<(), ASNError<'a>> {
+    pub fn expect_end(&mut self) -> Result<(), ASNError> {
         match self.next() {
             None => Ok(()),
             Some(Err(err)) => Err(err),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(asn)),
+            Some(Ok(_)) => Err(ASNError::UnexpectedType),
         }
     }
 
-    pub fn expect_any_or_end(&mut self) -> Result<Option<ASNType<'a>>, ASNError<'a>> {
+    pub fn expect_any_or_end(&mut self) -> Result<Option<ASNType<'a>>, ASNError> {
         match self.next() {
             Some(Ok(asn)) => Ok(Some(asn)),
             Some(Err(err)) => Err(err),
@@ -321,7 +314,7 @@ impl<'a> Parser<'a> {
 
 impl<'a> Iterator for Parser<'a> {
 
-    type Item = Result<ASNType<'a>, ASNError<'a>>;
+    type Item = Result<ASNType<'a>, ASNError>;
 
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -349,6 +342,7 @@ impl<'a> Iterator for Parser<'a> {
 #[cfg(test)]
 mod tests {
 
+    use reader::Reader;
     use parser::*;
     use types::*;
 
@@ -356,52 +350,67 @@ mod tests {
 
     #[test]
     fn decode_length_on_empty_bytes_fails() {
-        assert_eq!(parse_length(&[]), Err(ASNError::EndOfStream))
+        let mut reader = Reader::new(&[]);
+        assert_eq!(parse_length(&mut reader), Err(ASNError::EndOfStream));
     }
 
     #[test]
     fn detects_indefinite_length() {
-        assert_eq!(parse_length(&[0x80]), Err(ASNError::UnsupportedIndefiniteLength))
+        let mut reader = Reader::new(&[0x80]);
+        assert_eq!(parse_length(&mut reader), Err(ASNError::UnsupportedIndefiniteLength))
     }
 
     #[test]
     fn detects_reserved_length_of_127() {
-        assert_eq!(parse_length(&[0xFF]), Err(ASNError::ReservedLengthValue))
+        let mut reader = Reader::new(&[0xFF]);
+        assert_eq!(parse_length(&mut reader), Err(ASNError::ReservedLengthValue))
     }
 
     #[test]
     fn decode_length_on_single_byte_returns_valid_result() {
-        assert_eq!(parse_length(&[127, 0xDE, 0xAD]), parse_ok(127, &[0xDE, 0xAD]))
+        let mut reader = Reader::new(&[127, 0xDE, 0xAD]);
+        assert_eq!(parse_length(&mut reader), Ok(127));
+        assert_eq!(reader.remainder(), &[0xDE, 0xAD]);
     }
 
     #[test]
     fn decode_length_on_count_of_one_returns_none_if_value_less_than_128() {
-        assert_eq!(parse_length(&[TOP_BIT | 1, 127]), Err(ASNError::BadLengthEncoding(127)))
+        let mut reader = Reader::new(&[TOP_BIT | 1, 127]);
+        assert_eq!(parse_length(&mut reader), Err(ASNError::BadLengthEncoding(127)))
     }
 
     #[test]
     fn decode_length_on_count_of_one_succeeds_if_value_greater_than_127() {
-        assert_eq!(parse_length(&[TOP_BIT | 1, 128]), parse_ok(128, &[]))
+        let mut reader = Reader::new(&[TOP_BIT | 1, 128]);
+        assert_eq!(parse_length(&mut reader), Ok(128));
+        assert!(reader.is_empty());
     }
 
     #[test]
     fn decode_length_on_count_of_two_succeeds() {
-        assert_eq!(parse_length(&[TOP_BIT | 2, 0x01, 0x02, 0x03]), parse_ok(0x0102, &[0x03]))
+        let mut reader = Reader::new(&[TOP_BIT | 2, 0x01, 0x02, 0x03]);
+        assert_eq!(parse_length(&mut reader), Ok(0x0102));
+        assert_eq!(reader.remainder(), &[0x03]);
     }
 
     #[test]
     fn decode_length_on_count_of_three_succeeds() {
-        assert_eq!(parse_length(&[TOP_BIT | 3, 0x01, 0x02, 0x03, 0x04]), parse_ok(0x010203, &[0x04]))
+        let mut reader = Reader::new(&[TOP_BIT | 3, 0x01, 0x02, 0x03, 0x04]);
+        assert_eq!(parse_length(&mut reader), Ok(0x010203));
+        assert_eq!(reader.remainder(), &[0x04]);
     }
 
     #[test]
     fn decode_length_on_count_of_four_succeeds() {
-        assert_eq!(parse_length(&[TOP_BIT | 4, 0x01, 0x02, 0x03, 0x04, 0x05]), parse_ok(0x01020304, &[0x05]))
+        let mut reader = Reader::new(&[TOP_BIT | 4, 0x01, 0x02, 0x03, 0x04, 0x05]);
+        assert_eq!(parse_length(&mut reader), Ok(0x01020304));
+        assert_eq!(reader.remainder(), &[0x05]);
     }
 
     #[test]
     fn decode_length_on_count_of_five_fails() {
-        assert_eq!(parse_length(&[TOP_BIT | 5, 0x01, 0x02, 0x03, 0x04, 0x05]), Err(ASNError::UnsupportedLengthByteCount(5)))
+        let mut reader = Reader::new(&[TOP_BIT | 5, 0x01, 0x02, 0x03, 0x04, 0x05]);
+        assert_eq!(parse_length(&mut reader), Err(ASNError::UnsupportedLengthByteCount(5)))
     }
 
     #[test]
@@ -421,7 +430,7 @@ mod tests {
 
     #[test]
     fn parse_sequence_fails_if_insufficient_bytes() {
-        assert_eq!(parse_one_type(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ASNError::InsufficientBytes(0x0F, &[0xDE, 0xAD])));
+        assert_eq!(parse_one_type(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ASNError::InsufficientBytes(0x0F, 2)));
     }
 
     #[test]
