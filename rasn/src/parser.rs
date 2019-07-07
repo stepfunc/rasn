@@ -6,24 +6,7 @@ use reader::Reader;
 use types::{ASNError, ASNType, ASNInteger, ASNBitString, ASNObjectIdentifier};
 use chrono::{DateTime, FixedOffset};
 
-#[derive(Debug, PartialEq)]
-struct ParseToken<'a, T> {
-    value : T,
-    remainder: &'a[u8]
-}
-
-impl<'a, T> ParseToken<'a, T> {
-    fn new(value: T, remainder: &[u8]) -> ParseToken<T> {
-        ParseToken {value, remainder}
-    }
-}
-
-type ParseResult<'a, T> = Result<ParseToken<'a, T>, ASNError>;
 type ASNResult<'a> = Result<ASNType<'a>, ASNError>;
-
-fn parse_ok<T>(value : T,  remainder: &[u8]) -> ParseResult<T> {
-    Ok(ParseToken { value, remainder })
-}
 
 fn parse_seq(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
@@ -190,9 +173,7 @@ fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
     }
 }
 
-fn parse_one_type(input: &[u8]) -> ParseResult<ASNType> {
-
-    let mut reader = Reader::new(input);
+fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
 
     let typ : u8 = reader.read_byte()?;
 
@@ -201,11 +182,11 @@ fn parse_one_type(input: &[u8]) -> ParseResult<ASNType> {
         return Err(ASNError::NonUniversalType(typ))
     }
 
-    let length = parse_length(&mut reader)?;
+    let length = parse_length(reader)?;
 
     let contents = reader.take(length)?;
 
-    let result = match typ & 0b00111111 {
+    match typ & 0b00111111 {
 
         // simple types
         0x02 => parse_integer(contents),
@@ -223,19 +204,19 @@ fn parse_one_type(input: &[u8]) -> ParseResult<ASNType> {
         0x31 => parse_set(contents),
 
         x => Err(ASNError::UnsupportedUniversalType(x))
-    };
+    }
 
-    result.map(|value| ParseToken::new(value, reader.remainder()))
+    //result.map(|value| ParseToken::new(value, reader.remainder()))
 }
 
 pub struct Parser<'a> {
-    cursor: &'a[u8]
+    reader: Reader<'a>
 }
 
 impl<'a> Parser<'a> {
 
     pub fn new(input: &'a[u8]) -> Parser {
-        Parser { cursor: input }
+        Parser { reader: Reader::new(input) }
     }
 
     pub fn unwrap_outer_sequence(input: &'a[u8]) -> Result<Parser, ASNError> {
@@ -315,19 +296,16 @@ impl<'a> Iterator for Parser<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
 
-        if self.cursor.is_empty() {
+        if self.reader.is_empty() {
             return None
         }
 
-        match parse_one_type(self.cursor) {
+        match parse_one_type(&mut self.reader) {
             Err(e) => {
-                self.cursor = &[];
+                self.reader.clear();
                 Some(Err(e))
             },
-            Ok(token) => {
-                self.cursor = token.remainder;
-                Some(Ok(token.value))
-            }
+            Ok(token) => Some(Ok(token))
         }
     }
 }
@@ -411,22 +389,27 @@ mod tests {
 
     #[test]
     fn parse_one_fails_for_non_universal_type() {
-        assert_eq!(parse_one_type(&[0xFF]), Err(ASNError::NonUniversalType(0xFF)))
+        let mut reader = Reader::new(&[0xFF]);
+        assert_eq!(parse_one_type(&mut reader), Err(ASNError::NonUniversalType(0xFF)))
     }
 
     #[test]
     fn parse_one_fails_for_unknown_universal_type() {
-        assert_eq!(parse_one_type(&[0x3F, 0x00]), Err(ASNError::UnsupportedUniversalType(0x3F)))
+        let mut reader = Reader::new(&[0x3F, 0x00]);
+        assert_eq!(parse_one_type(&mut reader), Err(ASNError::UnsupportedUniversalType(0x3F)))
     }
 
     #[test]
     fn parses_sequence_correctly() {
-        assert_eq!(parse_one_type(&[0x30, 0x03, 0x02, 0x03, 0x04, 0x05, 0x06]), parse_ok(ASNType::Sequence(&[0x02, 0x03, 0x04]), &[0x05, 0x06]))
+        let mut reader = Reader::new(&[0x30, 0x03, 0x02, 0x03, 0x04, 0x05, 0x06]);
+        assert_eq!(parse_one_type(&mut reader), Ok(ASNType::Sequence(&[0x02, 0x03, 0x04])));
+        assert_eq!(reader.remainder(), &[0x05, 0x06]);
     }
 
     #[test]
     fn parse_sequence_fails_if_insufficient_bytes() {
-        assert_eq!(parse_one_type(&[0x30, 0x0F, 0xDE, 0xAD]), Err(ASNError::EndOfStream));
+        let mut reader = Reader::new(&[0x30, 0x0F, 0xDE, 0xAD]);
+        assert_eq!(parse_one_type(&mut reader), Err(ASNError::EndOfStream));
     }
 
     #[test]

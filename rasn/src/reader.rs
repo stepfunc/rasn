@@ -15,6 +15,10 @@ impl<'a> Reader<'a> {
         Reader{ bytes }
     }
 
+    pub fn clear(&mut self) -> ()  {
+        self.bytes = &[];
+    }
+
     pub fn is_empty(&self) -> bool {
         self.bytes.is_empty()
     }
