@@ -154,11 +154,11 @@ pub enum ASNError {
     // these errors relate to core DER parsing
     EmptySequence,
     EmptySet,
+    EndOfStream,
     ZeroLengthInteger,
     NullWithNonEmptyContents(usize),
     NonUniversalType(u8),
     UnsupportedUniversalType(u8),
-    InsufficientBytes(usize, usize),   // the required length and the actual remaining bytes
     UnsupportedIndefiniteLength,
     ReservedLengthValue,
     UnsupportedLengthByteCount(usize),
@@ -168,13 +168,18 @@ pub enum ASNError {
     BadUTCTime(chrono::format::ParseError),
     BitStringUnusedBitsTooLarge(u8),
     // these errors relate to schemas
-    EndOfStream,
     UnexpectedType
 }
 
-impl std::convert::From<reader::InputError> for ASNError {
-    fn from(_: reader::InputError) -> Self {
+impl std::convert::From<reader::EndOfStream> for ASNError {
+    fn from(_: reader::EndOfStream) -> Self {
         ASNError::EndOfStream
+    }
+}
+
+impl std::convert::From<std::str::Utf8Error> for ASNError {
+    fn from(err: std::str::Utf8Error) -> Self {
+        ASNError::BadUTF8(err)
     }
 }
 
@@ -198,9 +203,6 @@ impl std::fmt::Display for ASNError {
             }
             ASNError::UnsupportedUniversalType(tag) => {
                 f.write_fmt(format_args!("Unsupported universal type w/ tag: {})", tag))
-            }
-            ASNError::InsufficientBytes(required, actual) => {
-                f.write_fmt(format_args!("Insufficient bytes, required: {} present: {}", required, actual))
             }
             ASNError::UnsupportedIndefiniteLength => {
                 f.write_str("Encountered indefinite length encoding. Not allowed in DER.")

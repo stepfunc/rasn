@@ -58,12 +58,9 @@ fn parse_utc_time(contents: &[u8]) -> ASNResult {
             .or_else(|_| chrono::DateTime::parse_from_str(s, TZ_WITHOUT_SECONDS))
     }
 
-    match str::from_utf8(contents) {
-        Ok(s) => match try_parse_all_variants(s){
-            Ok(time) => Ok(ASNType::UTCTime(time)),
-            Err(err) => Err(ASNError::BadUTCTime(err))
-        }
-        Err(x) => Err(ASNError::BadUTF8(x))
+    match try_parse_all_variants(str::from_utf8(contents)?) {
+        Ok(time) => Ok(ASNType::UTCTime(time)),
+        Err(err) => Err(ASNError::BadUTCTime(err))
     }
 }
 
@@ -76,7 +73,7 @@ fn parse_string<T : Fn(&str) -> ASNType>(contents: &[u8], create: T) -> ASNResul
 
 fn parse_bit_string(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
-        return Err(ASNError::InsufficientBytes(0, contents.len()))
+        return Err(ASNError::EndOfStream)
     }
 
     let unused_bits = contents[0];

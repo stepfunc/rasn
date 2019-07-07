@@ -4,10 +4,9 @@ pub struct Reader<'a> {
     bytes : &'a [u8]
 }
 
+
 #[derive(Debug)]
-pub enum InputError {
-    EndOfStream
-}
+pub struct EndOfStream;
 
 impl<'a> Reader<'a> {
 
@@ -27,9 +26,9 @@ impl<'a> Reader<'a> {
         self.bytes.len()
     }
 
-    pub fn read_byte(&mut self) -> Result<u8, InputError> {
+    pub fn read_byte(&mut self) -> Result<u8, EndOfStream> {
         if self.bytes.is_empty() {
-            Err(InputError::EndOfStream)
+            Err(EndOfStream)
         }
         else {
             let value: u8 = self.bytes[0];
@@ -38,9 +37,9 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn take(&mut self, count: usize) -> Result<&'a [u8], InputError> {
+    pub fn take(&mut self, count: usize) -> Result<&'a [u8], EndOfStream> {
         if self.bytes.len() < count {
-            Err(InputError::EndOfStream)
+            Err(EndOfStream)
         }
         else {
             let ret = &self.bytes[0..count];
