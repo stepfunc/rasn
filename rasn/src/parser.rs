@@ -114,14 +114,12 @@ fn parse_object_identifier(contents: &[u8]) -> ASNResult {
 
     let mut reader = Reader::new(contents);
 
-    let first_byte = reader.read_byte()?;
-    let first = first_byte / 40;
-    let second = first_byte % 40;
-
     let mut items : Vec<u32> = Vec::new();
 
-    items.push(first as u32);
-    items.push(second as u32);
+    let first_byte = reader.read_byte()?;
+
+    items.push((first_byte / 40) as u32);
+    items.push((first_byte % 40) as u32);
 
     while !reader.is_empty() {
         items.push(parse_one(&mut reader)?);
