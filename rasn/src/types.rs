@@ -1,5 +1,7 @@
 extern crate chrono;
 
+use reader;
+
 #[derive(Debug, PartialEq)]
 pub struct ASNInteger<'a> {
     bytes: &'a[u8]
@@ -168,6 +170,12 @@ pub enum ASNError<'a> {
     // these errors relate to schemas
     EndOfStream,
     UnexpectedType(ASNType<'a>)
+}
+
+impl<'a> std::convert::From<reader::InputError> for ASNError<'a> {
+    fn from(_: reader::InputError) -> Self {
+        ASNError::EndOfStream
+    }
 }
 
 impl<'a> std::fmt::Display for ASNError<'a> {

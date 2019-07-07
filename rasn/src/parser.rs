@@ -2,6 +2,7 @@
 use chrono;
 use std::str;
 
+use reader::Reader;
 use types::{ASNError, ASNType, ASNInteger, ASNBitString, ASNObjectIdentifier};
 use chrono::{DateTime, FixedOffset};
 
@@ -105,64 +106,43 @@ fn parse_bit_string(contents: &[u8]) -> ASNResult {
 
 fn parse_object_identifier(contents: &[u8]) -> ASNResult {
 
-    fn parse_remainder<'a>(contents: &'a[u8], items: &mut Vec<u32>) -> Result<(), ASNError<'a>> {
+    fn parse_one<'a>(reader: &mut Reader) -> Result<u32, ASNError<'a>> {
+        let mut sum : u32 = 0;
+        let mut count: u32 = 0;
+        loop {
 
-        fn parse_one(contents: &[u8]) -> ParseResult<u32> {
-            let mut sum : u32 = 0;
-            let mut count: u32 = 0;
-            let mut cursor = contents;
+            // only allow 4*7 = 28 bits so that we don't overflow u32
+            if count > 3 { return Err(ASNError::BadOidLength) };
 
-            loop {
+            let next_byte = reader.read_byte()?;
+            let has_next : bool = (next_byte & 0b10000000) != 0;
+            let value : u32 = (next_byte & 0b01111111) as u32;
 
-                // only allow 4*7 = 28 bits so that we don't overflow u32
-                if count > 3 { return Err(ASNError::BadOidLength) };
-                if cursor.is_empty() { return Err(ASNError::InsufficientBytes(1, cursor)) }
+            sum <<= 7;
+            sum += value;
 
-                let has_next : bool = (cursor[0] & 0b10000000) != 0;
-                let value : u32 = (cursor[0] & 0b01111111) as u32;
+            count += 1;
 
-                sum <<= 7;
-                sum += value;
-
-                count += 1;
-                cursor = &cursor[1..];
-
-                if !has_next {
-                    return Ok(ParseToken::new(sum, &cursor))
-                }
+            if !has_next {
+                return Ok(sum)
             }
         }
-
-        let mut current = contents;
-
-        while !current.is_empty() {
-            match parse_one(current) {
-                Ok(ParseToken { value, remainder }) => {
-                    items.push(value);
-                    current = remainder;
-                },
-                Err(err) => {
-                    return Err(err)
-                }
-            }
-        }
-
-        Ok(())
     }
 
-    if contents.is_empty() {
-        return Err(ASNError::InsufficientBytes(1, contents))
-    }
+    let mut reader = Reader::new(contents);
 
-    let first = contents[0] / 40;
-    let second = contents[0] % 40;
+    let first_byte = reader.read_byte()?;
+    let first = first_byte / 40;
+    let second = first_byte % 40;
 
     let mut items : Vec<u32> = Vec::new();
 
     items.push(first as u32);
     items.push(second as u32);
 
-    parse_remainder(&contents[1..], &mut items)?;
+    while !reader.is_empty() {
+        items.push(parse_one(&mut reader)?);
+    }
 
     Ok(ASNType::ObjectIdentifier(ASNObjectIdentifier::new(items)))
 }
