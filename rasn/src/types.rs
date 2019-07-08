@@ -158,22 +158,19 @@ impl<'a> std::fmt::Display for ASNType<'a> {
             ASNType::ObjectIdentifier(id) => {
                 f.write_str("ObjectIdentifier: ")?;
 
-                match id.values().split_last() {
-                    Some((last, first)) => {
-                        for value in first {
-                            f.write_fmt(format_args!("{}.", value))?;
+                match get_oid(id.values()) {
+                    Some(oid) => f.write_str(oid.to_str()),
+                    None => {
+                        if let Some((last, first)) = id.values().split_last() {
+                            for value in first {
+                                f.write_fmt(format_args!("{}.", value))?;
+                            }
+                            f.write_fmt(format_args!("{}", last));
                         }
-                        f.write_fmt(format_args!("{}", last));
+                        Ok(())
                     }
-                    None => {}
+
                 }
-
-                if let Some(oid) = get_oid(id) {
-                    f.write_fmt(format_args!(" ({})", oid.to_str()));
-                }
-
-                Ok(())
-
             }
             ASNType::UTCTime(value) => {
                 f.write_fmt(format_args!("UTCTime: {}", value))
