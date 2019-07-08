@@ -1,6 +1,7 @@
 extern crate chrono;
 
 use reader;
+use oid::get_oid;
 
 #[derive(Debug, PartialEq)]
 pub struct ASNInteger<'a> {
@@ -162,12 +163,16 @@ impl<'a> std::fmt::Display for ASNType<'a> {
                         for value in first {
                             f.write_fmt(format_args!("{}.", value))?;
                         }
-                        f.write_fmt(format_args!("{}", last))
+                        f.write_fmt(format_args!("{}", last));
                     }
-                    None => {
-                        Ok(())
-                    }
+                    None => {}
                 }
+
+                if let Some(oid) = get_oid(id) {
+                    f.write_fmt(format_args!(" ({})", oid.to_str()));
+                }
+
+                Ok(())
 
             }
             ASNType::UTCTime(value) => {

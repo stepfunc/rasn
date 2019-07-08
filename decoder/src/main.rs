@@ -75,6 +75,19 @@ fn get_bytes(file: &String) -> Result<Vec<u8>, std::io::Error> {
     Ok(vec)
 }
 
+fn print_cert(cert: &Certificate) -> () {
+    let mut indent : usize = 0;
+    fn print_indent(indent: usize) {
+        for _ in 0 .. indent {
+            print!("    ");
+        }
+    }
+
+    println!("tbsCertificate:");
+    println!("signatureAlgorithm:");
+    println!("signatureValue:");
+}
+
 pub fn main() -> Result<(), std::io::Error> {
 
     fn parse_der(bytes: &[u8]) -> Result<(), std::io::Error> {
@@ -86,12 +99,8 @@ pub fn main() -> Result<(), std::io::Error> {
 
     fn parse_x509(bytes: &[u8]) -> Result<(), std::io::Error> {
         match Certificate::parse(bytes) {
-            Ok(cert) => {
-                println!("{:#?}", cert);
-            }
-            Err(err) => {
-                eprintln!("Error: {}", err);
-            }
+            Ok(cert) => print_cert(&cert),
+            Err(err) => eprintln!("Error: {}", err)
         };
 
         Ok(())

@@ -1,4 +1,4 @@
-use types::{ASNBitString, ASNObjectIdentifier, ASNError, ASNInteger, ASNType};
+use types::{ASNBitString, ASNError, ASNInteger, ASNType, ASNObjectIdentifier};
 use parser::Parser;
 
 #[derive(Debug)]
