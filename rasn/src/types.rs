@@ -127,10 +127,10 @@ impl<'a> std::fmt::Display for ASNType<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             ASNType::Sequence(_) => {
-                f.write_str("Sequence")
+                write!(f, "Sequence")
             }
             ASNType::Set(_) => {
-                f.write_str("Set")
+                write!(f, "Set")
             },
             ASNType::UTF8String(s) => {
                 f.write_str("UTF8String: ")?;
@@ -145,12 +145,8 @@ impl<'a> std::fmt::Display for ASNType<'a> {
                 f.write_str(s)
             },
             ASNType::Integer(cell) => match cell.as_i32() {
-                Some(x) => {
-                    f.write_fmt(format_args!("Integer: {}", x))
-                },
-                None => {
-                    f.write_str("Integer: (> u32)")
-                }
+                Some(x) => write!(f, "Integer: {}", x),
+                None => write!(f, "Integer: (> u32)")
             }
             ASNType::Null => {
                 f.write_str("Null")
@@ -163,9 +159,9 @@ impl<'a> std::fmt::Display for ASNType<'a> {
                     None => {
                         if let Some((last, first)) = id.values().split_last() {
                             for value in first {
-                                f.write_fmt(format_args!("{}.", value))?;
+                                write!(f, "{}.", value)?;
                             }
-                            f.write_fmt(format_args!("{}", last));
+                            write!(f, "{}", last)?;
                         }
                         Ok(())
                     }
@@ -173,13 +169,13 @@ impl<'a> std::fmt::Display for ASNType<'a> {
                 }
             }
             ASNType::UTCTime(value) => {
-                f.write_fmt(format_args!("UTCTime: {}", value))
+                write!(f, "UTCTime: {}", value)
             }
             ASNType::BitString(_) => {
-                f.write_fmt(format_args!("BitString"))
+                f.write_str("BitString")
             }
             ASNType::OctetString(_) => {
-                f.write_fmt(format_args!("OctetString"))
+                f.write_str("OctetString")
             }
         }
 
