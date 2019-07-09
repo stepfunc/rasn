@@ -230,13 +230,13 @@ impl std::fmt::Display for ASNError {
                 f.write_str("zero length integer")
             }
             ASNError::NullWithNonEmptyContents(length) => {
-                f.write_fmt(format_args!("NULL type w/ non-empty contents (length == {})", length))
+                write!(f, "NULL type w/ non-empty contents (length == {})", length)
             }
             ASNError::NonUniversalType(tag) => {
-                f.write_fmt(format_args!("Non-universal type w/ tag: {})", tag))
+                write!(f, "Non-universal type w/ tag: {})", tag)
             }
             ASNError::UnsupportedUniversalType(tag) => {
-                f.write_fmt(format_args!("Unsupported universal type w/ tag: {})", tag))
+                write!(f, "Unsupported universal type w/ tag: {})", tag)
             }
             ASNError::UnsupportedIndefiniteLength => {
                 f.write_str("Encountered indefinite length encoding. Not allowed in DER.")
@@ -245,31 +245,31 @@ impl std::fmt::Display for ASNError {
                 f.write_str("Length byte count of 127 is reserved")
             }
             ASNError::UnsupportedLengthByteCount(length) => {
-                f.write_fmt(format_args!("Length byte count of {} not supported", length))
+                write!(f, "Length byte count of {} not supported", length)
             }
             ASNError::BadLengthEncoding(value) => {
-                f.write_fmt(format_args!("Length should be encoded as a single byte: {}", value))
+                write!(f, "Length should be encoded as a single byte: {}", value)
             }
             ASNError::BadOidLength => {
                 f.write_str("Bad OID length")
             }
             ASNError::BadUTF8(err) => {
-                f.write_fmt(format_args!("Bad UTF8 encoding: {}", err))
+                write!(f, "Bad UTF8 encoding: {}", err)
             }
             ASNError::BadUTCTime(err) => {
-                f.write_fmt(format_args!("Bad UTC time string: {}", err))
+                write!(f, "Bad UTC time string: {}", err)
             }
             ASNError::BitStringUnusedBitsTooLarge(unused) => {
-                f.write_fmt(format_args!("Bit string w/ unused bits outside range [0..7]: {}", unused))
+                write!(f, "Bit string w/ unused bits outside range [0..7]: {}", unused)
             }
             ASNError::EndOfStream => {
                 f.write_str("Consumed all input before parsing required fields")
             }
             ASNError::UnexpectedType(expected, actual) => {
-                f.write_fmt(format_args!("Expected {:?}, but type is {:?}", expected, actual))
+                write!(f, "Expected {:?}, but type is {:?}", expected, actual)
             }
             ASNError::ExpectedEnd(actual) => {
-                f.write_fmt(format_args!("Expected end of stream but type is {:?}", actual))
+                write!(f, "Expected end of stream but type is {:?}", actual)
             }
         }
     }
