@@ -2,6 +2,7 @@ extern crate chrono;
 
 use reader;
 use oid::get_oid;
+use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
 pub struct ASNInteger<'a> {
@@ -29,6 +30,15 @@ impl<'a> ASNInteger<'a> {
             acc |= *byte as i32;
         }
         Some(acc)
+    }
+}
+
+impl<'a> Display for ASNInteger<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.as_i32() {
+            Some(x) => write!(f, "{}", x),
+            None => f.write_str("(> u32)")
+        }
     }
 }
 
@@ -70,6 +80,23 @@ impl ASNObjectIdentifier {
 
     pub fn values(&self) -> &[u32] {
         self.items.as_slice()
+    }
+}
+
+impl Display for ASNObjectIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        match get_oid(self.values()) {
+            Some(oid) => f.write_str(oid.to_str()),
+            None => {
+                if let Some((last, first)) = self.values().split_last() {
+                    for value in first {
+                        write!(f, "{}.", value)?;
+                    }
+                    write!(f, "{}", last)?;
+                }
+                Ok(())
+            }
+        }
     }
 }
 
@@ -144,29 +171,12 @@ impl<'a> std::fmt::Display for ASNType<'a> {
                 f.write_str("IA5String: ")?;
                 f.write_str(s)
             },
-            ASNType::Integer(cell) => match cell.as_i32() {
-                Some(x) => write!(f, "Integer: {}", x),
-                None => write!(f, "Integer: (> u32)")
-            }
+            ASNType::Integer(cell) => write!(f, "Integer: {}", cell),
             ASNType::Null => {
                 f.write_str("Null")
             },
             ASNType::ObjectIdentifier(id) => {
-                f.write_str("ObjectIdentifier: ")?;
-
-                match get_oid(id.values()) {
-                    Some(oid) => f.write_str(oid.to_str()),
-                    None => {
-                        if let Some((last, first)) = id.values().split_last() {
-                            for value in first {
-                                write!(f, "{}.", value)?;
-                            }
-                            write!(f, "{}", last)?;
-                        }
-                        Ok(())
-                    }
-
-                }
+                write!(f, "ObjectIdentifier: {}", id)
             }
             ASNType::UTCTime(value) => {
                 write!(f, "UTCTime: {}", value)

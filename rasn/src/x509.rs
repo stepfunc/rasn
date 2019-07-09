@@ -1,6 +1,18 @@
 use types::{ASNBitString, ASNError, ASNInteger, ASNType, ASNObjectIdentifier};
 use parser::Parser;
 
+pub trait LinePrinter {
+
+    fn begin_type(&mut self) -> ();
+    fn println(&mut self, line : &String) -> ();
+    fn println_str(&mut self, line : &str) -> ();
+    fn end_type(&mut self) -> ();
+}
+
+pub trait Printable<T : LinePrinter> {
+    fn print(&self, printer: &mut T) -> ();
+}
+
 #[derive(Debug)]
 pub struct Constructed<'a, T> {
     pub bytes: &'a[u8],
@@ -21,10 +33,35 @@ pub struct Certificate<'a> {
     pub signature_value : ASNBitString<'a>
 }
 
+impl<'a, T : LinePrinter> Printable<T> for Certificate<'a> {
+    fn print(&self, printer: &mut T) -> () {
+        printer.println_str("tbs certificate:");
+        printer.begin_type();
+
+        printer.end_type();
+
+        printer.println_str("signature algorithm:");
+        printer.begin_type();
+        self.signature_algorithm.print(printer);
+        printer.end_type();
+
+        printer.println_str("signature value:");
+        printer.begin_type();
+
+        printer.end_type();
+    }
+}
+
 #[derive(Debug)]
 pub struct AlgorithmIdentifier<'a> {
     pub algorithm : ASNObjectIdentifier,
     pub parameters : Option<ASNType<'a>>
+}
+
+impl<'a, T : LinePrinter> Printable<T> for AlgorithmIdentifier<'a> {
+    fn print(&self, printer: &mut T) -> () {
+        printer.println(&format!("algorithm: {}", self.algorithm));
+    }
 }
 
 #[derive(Debug)]

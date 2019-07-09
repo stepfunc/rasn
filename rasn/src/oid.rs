@@ -1,6 +1,3 @@
-use types::ASNObjectIdentifier;
-use std::collections::HashMap;
-
 
 pub enum AlgorithmID {
     Ed25519,
