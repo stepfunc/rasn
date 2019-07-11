@@ -9,6 +9,52 @@ pub struct ASNInteger<'a> {
     bytes: &'a[u8]
 }
 
+#[derive(Debug, PartialEq)]
+pub enum TagClass {
+    Universal,
+    Application,
+    ContextSpecific,
+    Private
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PC {
+    Primitive,
+    Constructed
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Identifier {
+    pub class : TagClass,
+    pub pc : PC,
+    pub tag: u8
+}
+
+impl Identifier {
+
+    pub fn new(class : TagClass, pc : PC, tag: u8) -> Identifier{
+        Identifier { class, pc, tag }
+    }
+
+    pub fn from(byte: u8) -> Identifier {
+
+        let class = match byte & 0b11000000 {
+            0b00000000 => TagClass::Universal,
+            0b01000000 => TagClass::Application,
+            0b10000000 => TagClass::ContextSpecific,
+            _ => TagClass::Private
+        };
+
+        let pc = if (byte & 0b00100000) != 0 {
+            PC::Constructed
+        } else { PC::Primitive };
+
+        let tag = byte & 0b00011111;
+
+        Identifier::new(class, pc, tag)
+    }
+}
+
 impl<'a> ASNInteger<'a> {
 
     const VALID_I32_LENGTHS : std::ops::Range<usize> = 1usize..4usize;
@@ -215,7 +261,7 @@ pub enum ASNError {
     EndOfStream,
     ZeroLengthInteger,
     NullWithNonEmptyContents(usize),
-    UnsupportedTag(u8),
+    UnsupportedId(Identifier),
     UnsupportedIndefiniteLength,
     ReservedLengthValue,
     UnsupportedLengthByteCount(usize),
@@ -256,8 +302,8 @@ impl std::fmt::Display for ASNError {
             ASNError::NullWithNonEmptyContents(length) => {
                 write!(f, "NULL type w/ non-empty contents (length == {})", length)
             }
-            ASNError::UnsupportedTag(tag) => {
-                write!(f, "Unsupported tag: {})", tag)
+            ASNError::UnsupportedId(id) => {
+                write!(f, "Unsupported id: {:?})", id)
             }
             ASNError::UnsupportedIndefiniteLength => {
                 f.write_str("Encountered indefinite length encoding. Not allowed in DER.")
