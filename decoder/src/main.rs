@@ -1,7 +1,6 @@
 extern crate rasn;
 
 mod der_printer;
-mod line_printer;
 
 use std::env;
 use std::process;
@@ -9,8 +8,8 @@ use std::io::prelude::*;
 use std::fs::File;
 
 use rasn::parse_all::parse_all;
-use rasn::x509::{Certificate, Printable};
-use line_printer::ConsoleLinePrinter;
+use rasn::x509::Certificate;
+use rasn::printer::{ConsoleLinePrinter, Printable};
 
 
 fn get_bytes(file: &String) -> Result<Vec<u8>, std::io::Error> {

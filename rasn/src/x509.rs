@@ -1,17 +1,6 @@
 use types::{ASNBitString, ASNError, ASNInteger, ASNType, ASNObjectIdentifier};
 use parser::Parser;
-
-pub trait LinePrinter {
-
-    fn begin_type(&mut self) -> ();
-    fn println_fmt(&mut self, fmt : &std::fmt::Arguments) -> ();
-    fn println_str(&mut self, line : &str) -> ();
-    fn end_type(&mut self) -> ();
-}
-
-pub trait Printable {
-    fn print(&self, printer: &mut LinePrinter) -> ();
-}
+use printer::{Printable, LinePrinter, print_type};
 
 #[derive(Debug)]
 pub struct Constructed<'a, T> {
@@ -35,20 +24,26 @@ pub struct Certificate<'a> {
 
 impl<'a> Printable for Certificate<'a> {
     fn print(&self, printer: &mut LinePrinter) -> () {
-        printer.println_str("tbs certificate:");
-        printer.begin_type();
+        print_type("tbs certificate", &self.tbs_certificate.value, printer);
+        print_type("signature algorithm", &self.signature_algorithm, printer);
+        print_type("signature value", &self.signature_value, printer);
+    }
+}
 
-        printer.end_type();
+impl<'a> Printable for ASNBitString<'a> {
+    fn print(&self, printer: &mut LinePrinter) -> () {
+        if let Some(octets) = self.octets() {
+            for chunk in octets.chunks(16) {
+                printer.begin_line();
+                if let Some((last, first)) = chunk.split_last() {
+                    for byte in first {
+                        printer.print_fmt(&format_args!("{:02X}:", byte));
+                    }
+                    printer.println_fmt(&format_args!("{:02X}", last));
+                }
+            }
+        }
 
-        printer.println_str("signature algorithm:");
-        printer.begin_type();
-        self.signature_algorithm.print(printer);
-        printer.end_type();
-
-        printer.println_str("signature value:");
-        printer.begin_type();
-
-        printer.end_type();
     }
 }
 
@@ -60,6 +55,7 @@ pub struct AlgorithmIdentifier<'a> {
 
 impl<'a> Printable for AlgorithmIdentifier<'a> {
     fn print(&self, printer: &mut LinePrinter) -> () {
+        printer.begin_line();
         printer.println_fmt(&format_args!("algorithm: {}", self.algorithm));
     }
 }
@@ -72,6 +68,12 @@ pub struct TBSCertificate<'a> {
     pub validity: Validity,
     pub subject : Name<'a>,
     pub subject_public_key_info : SubjectPublicKeyInfo<'a>
+}
+
+impl<'a> Printable for TBSCertificate<'a> {
+    fn print(&self, printer: &mut LinePrinter) -> () {
+
+    }
 }
 
 type Time = chrono::DateTime<chrono::FixedOffset>;

@@ -7,4 +7,5 @@ pub mod types;
 pub mod parser;
 pub mod parse_all;
 pub mod x509;
+pub mod printer;
 
