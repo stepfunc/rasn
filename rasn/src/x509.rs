@@ -1,5 +1,5 @@
 use types::{ASNBitString, ASNError, ASNInteger, ASNType, ASNObjectIdentifier};
-use parser::Parser;
+use parser::{Parser, parse_all};
 use printer::{Printable, LinePrinter, print_type};
 
 #[derive(Debug)]
@@ -73,6 +73,14 @@ pub struct TBSCertificate<'a> {
 impl<'a> Printable for TBSCertificate<'a> {
     fn print(&self, printer: &mut LinePrinter) -> () {
 
+        printer.begin_line();
+        printer.println_fmt(&format_args!("serial number: {}", self.serial_number));
+
+        print_type("signature", &self.signature, printer);
+        print_type("issuer", &self.issuer, printer);
+        print_type("validity", &self.validity, printer);
+        print_type("subject", &self.subject, printer);
+        print_type("subject public key info", &self.subject_public_key_info, printer);
     }
 }
 
@@ -90,10 +98,22 @@ impl Validity {
     }
 
     fn parse(input: &[u8]) -> Result<Validity, ASNError> {
-        let mut parser = Parser::new(input);
-        let value = Validity::new( parser.expect_utc_time()?,  parser.expect_utc_time()?);
-        parser.expect_end()?;
-        Ok(value)
+
+        parse_all(input, |parser| {
+            Ok(Validity::new( parser.expect_utc_time()?,  parser.expect_utc_time()?))
+        })
+
+    }
+}
+
+impl Printable for Validity {
+    fn print(&self, printer: &mut LinePrinter) -> () {
+
+        printer.begin_line();
+        printer.println_fmt(&format_args!("not before: {}", self.not_before));
+
+        printer.begin_line();
+        printer.println_fmt(&format_args!("not after: {}", self.not_after));
     }
 }
 
@@ -112,14 +132,20 @@ impl<'a> AttributeTypeAndValue<'a> {
     fn parse(input: &'a [u8]) -> Result<AttributeTypeAndValue<'a>, ASNError> {
         let mut parser = Parser::new(input);
 
-        let value = AttributeTypeAndValue::new(
-            parser.expect_object_identifier()?,
-              parser.expect_any()?
-        );
+        let value = AttributeTypeAndValue::new( parser.expect_object_identifier()?,  parser.expect_any()?);
 
         parser.expect_end()?;
 
         Ok(value)
+    }
+}
+
+impl<'a> Printable for AttributeTypeAndValue<'a> {
+    fn print(&self, printer: &mut LinePrinter) -> () {
+        printer.begin_line();
+        printer.println_fmt(&format_args!("id: {}", self.id));
+        printer.begin_line();
+        printer.println_fmt(&format_args!("{}", self.value));
     }
 }
 
@@ -175,6 +201,18 @@ impl<'a> Name<'a> {
     }
 }
 
+impl<'a> Printable for Name<'a> {
+    fn print(&self, printer: &mut LinePrinter) -> () {
+        for rdn in &self.values {
+            for attr in &rdn.values {
+                printer.begin_type();
+                attr.print(printer);
+                printer.end_type();
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct SubjectPublicKeyInfo<'a> {
     pub algorithm: AlgorithmIdentifier<'a>,
@@ -198,6 +236,13 @@ impl<'a> SubjectPublicKeyInfo<'a> {
         parser.expect_end()?;
 
         Ok(value)
+    }
+}
+
+impl<'a> Printable for SubjectPublicKeyInfo<'a> {
+    fn print(&self, printer: &mut LinePrinter) -> () {
+        print_type("algorithm", &self.algorithm, printer);
+        print_type("subject public key", &self.subject_public_key, printer);
     }
 }
 

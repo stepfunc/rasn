@@ -200,12 +200,17 @@ fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
 
         x => Err(ASNError::UnsupportedUniversalType(x))
     }
-
-    //result.map(|value| ParseToken::new(value, reader.remainder()))
 }
 
 pub struct Parser<'a> {
     reader: Reader<'a>
+}
+
+pub fn parse_all<'a, T>(input: &'a[u8], parse: fn(&mut Parser)-> Result<T, ASNError>) -> Result<T,ASNError> {
+    let mut parser = Parser::new(input);
+    let value = parse(&mut parser)?;
+    parser.expect_end()?;
+    Ok(value)
 }
 
 impl<'a> Parser<'a> {

@@ -17,7 +17,7 @@ impl<'a> ASNInteger<'a> {
         ASNInteger{bytes}
     }
 
-    fn as_i32(&self) -> Option<i32> {
+    pub fn as_i32(&self) -> Option<i32> {
 
         // can only parse values with length in [1,4] bytes
         if !ASNInteger::VALID_I32_LENGTHS.contains(&self.bytes.len()) {
@@ -37,7 +37,16 @@ impl<'a> Display for ASNInteger<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.as_i32() {
             Some(x) => write!(f, "{}", x),
-            None => f.write_str("(> u32)")
+            None => {
+                if let Some((tail, head)) = self.bytes.split_last() {
+                    for byte in head {
+                        write!(f, "{:02X}:", byte)?;
+                    }
+                    write!(f, "{:02X}", tail)
+                } else {
+                    write!(f, "[]")
+                }
+            }
         }
     }
 }
