@@ -112,7 +112,7 @@ impl Display for ASNObjectIdentifier {
 #[derive(Debug, PartialEq)]
 pub enum ASNType<'a> {
     Sequence(&'a[u8]),             // the interior data of the sequence
-    Set(&'a[u8]),                          // the interior data of the set
+    Set(&'a[u8]),                  // the interior data of the set
     Integer(ASNInteger<'a>),
     PrintableString(&'a str),
     IA5String(&'a str),
@@ -121,7 +121,8 @@ pub enum ASNType<'a> {
     UTCTime(chrono::DateTime<chrono::FixedOffset>),
     BitString(ASNBitString<'a>),
     OctetString(&'a[u8]),
-    ObjectIdentifier(ASNObjectIdentifier)
+    ObjectIdentifier(ASNObjectIdentifier),
+    ExplicitTag(u8, &'a[u8])       // the tag value and the data
 }
 
 // An identifier for the type that carries no data
@@ -138,7 +139,8 @@ pub enum ASNTypeId {
     UTCTime,
     BitString,
     OctetString,
-    ObjectIdentifier
+    ObjectIdentifier,
+    ExplicitTag
 }
 
 impl<'a> ASNType<'a> {
@@ -154,7 +156,8 @@ impl<'a> ASNType<'a> {
             ASNType::UTCTime(_) => ASNTypeId::UTCTime,
             ASNType::BitString(_) => ASNTypeId::BitString,
             ASNType::OctetString(_) => ASNTypeId::OctetString,
-            ASNType::ObjectIdentifier(_) => ASNTypeId::ObjectIdentifier
+            ASNType::ObjectIdentifier(_) => ASNTypeId::ObjectIdentifier,
+            ASNType::ExplicitTag(_,_) => ASNTypeId::ExplicitTag
         }
     }
 }
@@ -196,6 +199,9 @@ impl<'a> std::fmt::Display for ASNType<'a> {
             ASNType::OctetString(_) => {
                 f.write_str("OctetString")
             }
+            ASNType::ExplicitTag(u8, _) => {
+                write!(f,"[{}]", u8)
+            }
         }
 
     }
@@ -209,8 +215,7 @@ pub enum ASNError {
     EndOfStream,
     ZeroLengthInteger,
     NullWithNonEmptyContents(usize),
-    NonUniversalType(u8),
-    UnsupportedUniversalType(u8),
+    UnsupportedTag(u8),
     UnsupportedIndefiniteLength,
     ReservedLengthValue,
     UnsupportedLengthByteCount(usize),
@@ -251,11 +256,8 @@ impl std::fmt::Display for ASNError {
             ASNError::NullWithNonEmptyContents(length) => {
                 write!(f, "NULL type w/ non-empty contents (length == {})", length)
             }
-            ASNError::NonUniversalType(tag) => {
-                write!(f, "Non-universal type w/ tag: {})", tag)
-            }
-            ASNError::UnsupportedUniversalType(tag) => {
-                write!(f, "Unsupported universal type w/ tag: {})", tag)
+            ASNError::UnsupportedTag(tag) => {
+                write!(f, "Unsupported tag: {})", tag)
             }
             ASNError::UnsupportedIndefiniteLength => {
                 f.write_str("Encountered indefinite length encoding. Not allowed in DER.")

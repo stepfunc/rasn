@@ -168,20 +168,13 @@ fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
     }
 }
 
-fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
-
-    let typ : u8 = reader.read_byte()?;
-
-    if typ & 0b11000000 != 0 {
-        // non-universal type
-        return Err(ASNError::NonUniversalType(typ))
-    }
+fn parse_universal_simple_type<'a>(tag: u8, reader: &mut Reader<'a>) -> ASNResult<'a> {
 
     let length = parse_length(reader)?;
 
     let contents = reader.take(length)?;
 
-    match typ & 0b00111111 {
+    match tag {
 
         // simple types
         0x02 => parse_integer(contents),
@@ -194,11 +187,49 @@ fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
         0x16 => parse_string(contents, |s| ASNType::IA5String(s)),
         0x17 => parse_utc_time(contents),
 
-        // structured types
-        0x30 => parse_seq(contents),
-        0x31 => parse_set(contents),
+        _ => Err(ASNError::UnsupportedTag(tag))
+    }
+}
 
-        x => Err(ASNError::UnsupportedUniversalType(x))
+fn parse_universal_constructed_type<'a>(tag: u8, reader: &mut Reader<'a>) -> ASNResult<'a> {
+
+    let length = parse_length(reader)?;
+
+    let contents = reader.take(length)?;
+
+    match tag {
+
+        // structured types
+        0x10 => parse_seq(contents),
+        0x11 => parse_set(contents),
+
+        _ => Err(ASNError::UnsupportedTag(tag))
+    }
+}
+
+fn parse_context_specific_constructed_type<'a>(tag: u8, reader: &mut Reader<'a>) -> ASNResult<'a> {
+
+    let length = parse_length(reader)?;
+
+    let contents = reader.take(length)?;
+
+    Ok(ASNType::ExplicitTag(tag, contents))
+}
+
+fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
+
+    let byte : u8 = reader.read_byte()?;
+
+    // get the class and constructed bits
+    let top3 = (byte & 0b11100000) >> 5;
+    // mask off the tag
+    let tag = byte & 0b00011111;
+
+    match top3 {
+        0b000 => parse_universal_simple_type(tag, reader),
+        0b001 => parse_universal_constructed_type(tag, reader),
+        0b101 => parse_context_specific_constructed_type(tag, reader),
+        _ => Err(ASNError::UnsupportedTag(byte))
     }
 }
 
@@ -418,13 +449,13 @@ mod tests {
     #[test]
     fn parse_one_fails_for_non_universal_type() {
         let mut reader = Reader::new(&[0xFF]);
-        assert_eq!(parse_one_type(&mut reader), Err(ASNError::NonUniversalType(0xFF)))
+        assert_eq!(parse_one_type(&mut reader), Err(ASNError::UnsupportedTag(0xFF)))
     }
 
     #[test]
     fn parse_one_fails_for_unknown_universal_type() {
-        let mut reader = Reader::new(&[0x3F, 0x00]);
-        assert_eq!(parse_one_type(&mut reader), Err(ASNError::UnsupportedUniversalType(0x3F)))
+        let mut reader = Reader::new(&[0x1F, 0x00]);
+        assert_eq!(parse_one_type(&mut reader), Err(ASNError::UnsupportedTag(0x1F)))
     }
 
     #[test]
@@ -438,6 +469,12 @@ mod tests {
     fn parse_sequence_fails_if_insufficient_bytes() {
         let mut reader = Reader::new(&[0x30, 0x0F, 0xDE, 0xAD]);
         assert_eq!(parse_one_type(&mut reader), Err(ASNError::EndOfStream));
+    }
+
+    #[test]
+    fn parses_explicit_tag() {
+        let mut reader = Reader::new(&[0xA1, 0x02, 0xCA, 0xFE]);
+        assert_eq!(parse_one_type(&mut reader), Ok(ASNType::ExplicitTag(1, &[0xCA, 0xFE])));
     }
 
     #[test]

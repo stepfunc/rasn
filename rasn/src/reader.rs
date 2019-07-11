@@ -26,6 +26,15 @@ impl<'a> Reader<'a> {
         self.bytes.len()
     }
 
+    pub fn peek_or_fail(&self) -> Result<u8, EndOfStream> {
+        if self.bytes.is_empty() {
+            Err(EndOfStream)
+        }
+        else {
+            Ok(self.bytes[0])
+        }
+    }
+
     pub fn read_byte(&mut self) -> Result<u8, EndOfStream> {
         if self.bytes.is_empty() {
             Err(EndOfStream)
