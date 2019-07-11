@@ -4,13 +4,13 @@ use parser::Parser;
 pub trait LinePrinter {
 
     fn begin_type(&mut self) -> ();
-    fn println(&mut self, line : &String) -> ();
+    fn println_fmt(&mut self, fmt : &std::fmt::Arguments) -> ();
     fn println_str(&mut self, line : &str) -> ();
     fn end_type(&mut self) -> ();
 }
 
-pub trait Printable<T : LinePrinter> {
-    fn print(&self, printer: &mut T) -> ();
+pub trait Printable {
+    fn print(&self, printer: &mut LinePrinter) -> ();
 }
 
 #[derive(Debug)]
@@ -33,8 +33,8 @@ pub struct Certificate<'a> {
     pub signature_value : ASNBitString<'a>
 }
 
-impl<'a, T : LinePrinter> Printable<T> for Certificate<'a> {
-    fn print(&self, printer: &mut T) -> () {
+impl<'a> Printable for Certificate<'a> {
+    fn print(&self, printer: &mut LinePrinter) -> () {
         printer.println_str("tbs certificate:");
         printer.begin_type();
 
@@ -58,9 +58,9 @@ pub struct AlgorithmIdentifier<'a> {
     pub parameters : Option<ASNType<'a>>
 }
 
-impl<'a, T : LinePrinter> Printable<T> for AlgorithmIdentifier<'a> {
-    fn print(&self, printer: &mut T) -> () {
-        printer.println(&format!("algorithm: {}", self.algorithm));
+impl<'a> Printable for AlgorithmIdentifier<'a> {
+    fn print(&self, printer: &mut LinePrinter) -> () {
+        printer.println_fmt(&format_args!("algorithm: {}", self.algorithm));
     }
 }
 

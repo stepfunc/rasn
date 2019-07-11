@@ -22,9 +22,9 @@ impl LinePrinter for ConsoleLinePrinter {
         self.indent += 1;
     }
 
-    fn println(&mut self, line: &String) -> () {
+    fn println_fmt(&mut self, args: &std::fmt::Arguments) -> () {
         self.print_indent();
-        println!("{}", line)
+        println!("{}", args)
     }
 
     fn println_str(&mut self, line: &str) -> () {
