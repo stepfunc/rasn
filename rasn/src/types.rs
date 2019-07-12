@@ -6,7 +6,7 @@ use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
 pub struct ASNInteger<'a> {
-    bytes: &'a[u8]
+    pub bytes: &'a[u8]
 }
 
 #[derive(Debug, PartialEq)]
@@ -122,6 +122,18 @@ impl<'a> ASNBitString<'a> {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct ASNExplicitTag<'a> {
+    pub value: u8,
+    pub contents: &'a[u8]
+}
+
+impl<'a> ASNExplicitTag<'a> {
+    pub fn new(value: u8, contents: &'a[u8]) -> ASNExplicitTag<'a> {
+        ASNExplicitTag{ value, contents}
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct ASNObjectIdentifier {
     items: Vec<u32>
 }
@@ -169,7 +181,7 @@ pub enum ASNType<'a> {
     BitString(ASNBitString<'a>),
     OctetString(&'a[u8]),
     ObjectIdentifier(ASNObjectIdentifier),
-    ExplicitTag(u8, &'a[u8])       // the tag value and the data
+    ExplicitTag(ASNExplicitTag<'a>)       // the tag value and the data
 }
 
 // An identifier for the type that carries no data
@@ -206,7 +218,7 @@ impl<'a> ASNType<'a> {
             ASNType::BitString(_) => ASNTypeId::BitString,
             ASNType::OctetString(_) => ASNTypeId::OctetString,
             ASNType::ObjectIdentifier(_) => ASNTypeId::ObjectIdentifier,
-            ASNType::ExplicitTag(_,_) => ASNTypeId::ExplicitTag
+            ASNType::ExplicitTag(_) => ASNTypeId::ExplicitTag
         }
     }
 }
@@ -251,8 +263,8 @@ impl<'a> std::fmt::Display for ASNType<'a> {
             ASNType::OctetString(_) => {
                 f.write_str("OctetString")
             }
-            ASNType::ExplicitTag(u8, _) => {
-                write!(f,"[{}]", u8)
+            ASNType::ExplicitTag(tag) => {
+                write!(f,"[{}]", tag.value)
             }
         }
 
@@ -280,7 +292,9 @@ pub enum ASNError {
     BitStringUnusedBitsTooLarge(u8),
     // these errors relate to schemas
     UnexpectedType(ASNTypeId, ASNTypeId),  // the expected type followed by the actual type
-    ExpectedEnd(ASNTypeId)                 // type present instead of end
+    ExpectedEnd(ASNTypeId),                // type present instead of end
+    IntegerTooLarge(usize),                // count of bytes
+    BadEnumValue(&'static str, i32)        // name of the enum and the bad integer value
 }
 
 impl std::convert::From<reader::EndOfStream> for ASNError {
@@ -351,6 +365,12 @@ impl std::fmt::Display for ASNError {
             }
             ASNError::ExpectedEnd(actual) => {
                 write!(f, "Expected end of stream but type is {:?}", actual)
+            }
+            ASNError::IntegerTooLarge(num_bytes) => {
+                write!(f, "The integer length exceeds the representation of i32: {}", num_bytes)
+            }
+            ASNError::BadEnumValue(name, value) => {
+                write!(f, "The enum '{}' has not mapping for value {}", name, value)
             }
         }
     }

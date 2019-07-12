@@ -23,9 +23,9 @@ pub fn parse_all<T : ParseHandler>(input: &[u8], handler: &mut T) -> Result<(), 
                         parse_all(contents, handler)?;
                         handler.end_constructed();
                     }
-                    ASNType::ExplicitTag(_, contents) => {
+                    ASNType::ExplicitTag(tag) => {
                         handler.begin_constructed();
-                        parse_all(contents, handler)?;
+                        parse_all(tag.contents, handler)?;
                         handler.end_constructed();
                     }
                     ASNType::Set(contents) => {

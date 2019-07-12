@@ -3,7 +3,7 @@ use chrono;
 use std::str;
 
 use reader::Reader;
-use types::{Identifier, TagClass, PC, ASNError, ASNType, ASNInteger, ASNBitString, ASNObjectIdentifier, ASNTypeId};
+use types::{Identifier, TagClass, PC, ASNError, ASNType, ASNInteger, ASNBitString, ASNObjectIdentifier, ASNTypeId, ASNExplicitTag};
 use chrono::{DateTime, FixedOffset};
 
 type ASNResult<'a> = Result<ASNType<'a>, ASNError>;
@@ -219,7 +219,7 @@ fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
 
         Identifier{ class: TagClass::ContextSpecific, pc: PC::Constructed, tag} => {
             let contents = get_contents(reader)?;
-            Ok(ASNType::ExplicitTag(tag, contents))
+            Ok(ASNType::ExplicitTag(ASNExplicitTag::new(tag, contents)))
         },
 
         _ => Err(ASNError::UnsupportedId(id))
@@ -243,6 +243,38 @@ impl<'a> Parser<'a> {
         Parser { reader: Reader::new(input) }
     }
 
+    pub fn get_optional_explicit_tag(&mut self, tag: u8) -> Result<Option<ASNExplicitTag<'a>>, ASNError> {
+        if self.reader.is_empty() {
+            return Ok(None);
+        }
+
+        let id = Identifier::from(self.reader.peek_or_fail()?);
+
+        if id.tag != tag {
+            return Ok(None);
+        }
+
+        if let Identifier { class: TagClass::ContextSpecific, pc: PC::Constructed, tag: _ } = id {
+            Ok(Some(self.expect_explicit_tag()?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn get_explicitly_tagged_integer_or_default(&mut self, tag: u8, default: i32) -> Result<i32, ASNError> {
+        match self.get_optional_explicit_tag(tag)? {
+            Some(tag) => {
+                let mut parser = Parser::new(tag.contents);
+                let value = parser.expect_integer()?;
+                match value.as_i32() {
+                    Some(x) => Ok(x),
+                    None => Err(ASNError::IntegerTooLarge(value.bytes.len()))
+                }
+            },
+            None => Ok(default)
+        }
+    }
+
     pub fn unwrap_outer_sequence(input: &'a[u8]) -> Result<Parser, ASNError> {
         let mut parser = Parser::new(input);
         let bytes = parser.expect_sequence()?;
@@ -259,6 +291,15 @@ impl<'a> Parser<'a> {
 
     pub fn is_empty(&self) -> bool {
         self.reader.is_empty()
+    }
+
+    pub fn expect_explicit_tag(&mut self) -> Result<ASNExplicitTag<'a>, ASNError> {
+        match self.next() {
+            Some(Ok(ASNType::ExplicitTag(tag))) => Ok(tag),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::ExplicitTag, asn.get_id())),
+            Some(Err(err)) => Err(err),
+            None => Err(ASNError::EndOfStream)
+        }
     }
 
     pub fn expect_sequence(&mut self) -> Result<&'a[u8], ASNError> {
@@ -467,7 +508,7 @@ mod tests {
     #[test]
     fn parses_explicit_tag() {
         let mut reader = Reader::new(&[0xA1, 0x02, 0xCA, 0xFE]);
-        assert_eq!(parse_one_type(&mut reader), Ok(ASNType::ExplicitTag(1, &[0xCA, 0xFE])));
+        assert_eq!(parse_one_type(&mut reader), Ok(ASNType::ExplicitTag(ASNExplicitTag::new(1, &[0xCA, 0xFE]))));
     }
 
     #[test]

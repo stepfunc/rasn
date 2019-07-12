@@ -61,7 +61,15 @@ impl<'a> Printable for AlgorithmIdentifier<'a> {
 }
 
 #[derive(Debug)]
+pub enum Version {
+    V1,
+    V2,
+    V3
+}
+
+#[derive(Debug)]
 pub struct TBSCertificate<'a> {
+    pub version : Version,
     pub serial_number : ASNInteger<'a>,
     pub signature : AlgorithmIdentifier<'a>,
     pub issuer : Name<'a>,
@@ -72,6 +80,9 @@ pub struct TBSCertificate<'a> {
 
 impl<'a> Printable for TBSCertificate<'a> {
     fn print(&self, printer: &mut LinePrinter) -> () {
+
+        printer.begin_line();
+        printer.println_fmt(&format_args!("version: {:?}", self.version));
 
         printer.begin_line();
         printer.println_fmt(&format_args!("serial number: {}", self.serial_number));
@@ -289,22 +300,33 @@ impl<'a> AlgorithmIdentifier<'a> {
 
 impl<'a> TBSCertificate<'a> {
 
-    pub fn new(serial_number : ASNInteger<'a>,
+    pub fn new(version : Version,
+               serial_number : ASNInteger<'a>,
                signature : AlgorithmIdentifier<'a>,
                issuer : Name<'a>,
                validity: Validity,
                subject : Name<'a>,
                subject_public_key_info : SubjectPublicKeyInfo<'a>) -> TBSCertificate<'a> {
-        TBSCertificate { serial_number, signature, issuer, validity, subject, subject_public_key_info }
+        TBSCertificate { version, serial_number, signature, issuer, validity, subject, subject_public_key_info }
     }
 
     fn parse(input: &[u8]) -> Result<Constructed<TBSCertificate>, ASNError> {
+
+        fn parse_version(parser: &mut Parser) -> Result<Version, ASNError> {
+            match parser.get_explicitly_tagged_integer_or_default(0, 0)? {
+                0 => Ok(Version::V1),
+                1 => Ok(Version::V2),
+                2 => Ok(Version::V3),
+                x => Err(ASNError::BadEnumValue("version", x))
+            }
+        }
 
         let mut parser = Parser::new(input);
 
         let value = Constructed::new(
             input,
             TBSCertificate::new(
+                parse_version(&mut parser)?,
                 parser.expect_integer()?,
                 AlgorithmIdentifier::parse(parser.expect_sequence()?)?,
                 Name::parse(parser.expect_sequence()?)?,
