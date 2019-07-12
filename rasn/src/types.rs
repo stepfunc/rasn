@@ -157,6 +157,7 @@ impl Display for ASNObjectIdentifier {
 
 #[derive(Debug, PartialEq)]
 pub enum ASNType<'a> {
+    Boolean(bool),
     Sequence(&'a[u8]),             // the interior data of the sequence
     Set(&'a[u8]),                  // the interior data of the set
     Integer(ASNInteger<'a>),
@@ -175,6 +176,7 @@ pub enum ASNType<'a> {
 // used for error purposes
 #[derive(Debug, PartialEq)]
 pub enum ASNTypeId {
+    Boolean,
     Sequence,
     Set,
     Integer,
@@ -192,6 +194,7 @@ pub enum ASNTypeId {
 impl<'a> ASNType<'a> {
     pub fn get_id(&self) -> ASNTypeId {
         match self {
+            ASNType::Boolean(_) => ASNTypeId::Boolean,
             ASNType::Sequence(_) => ASNTypeId::Sequence,
             ASNType::Set(_) => ASNTypeId::Set,
             ASNType::Integer(_) => ASNTypeId::Integer,
@@ -211,6 +214,9 @@ impl<'a> ASNType<'a> {
 impl<'a> std::fmt::Display for ASNType<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            ASNType::Boolean(value) => {
+                write!(f, "Boolean: {}", value)
+            }
             ASNType::Sequence(_) => {
                 write!(f, "Sequence")
             }
@@ -256,6 +262,8 @@ impl<'a> std::fmt::Display for ASNType<'a> {
 #[derive(Debug, PartialEq)]
 pub enum ASNError {
     // these errors relate to core DER parsing
+    BadBooleanLength(usize),
+    BadBooleanValue(u8),
     EmptySequence,
     EmptySet,
     EndOfStream,
@@ -290,6 +298,12 @@ impl std::convert::From<std::str::Utf8Error> for ASNError {
 impl std::fmt::Display for ASNError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            ASNError::BadBooleanLength(len) => {
+               write!(f, "Bad boolean length: {}", len)
+            }
+            ASNError::BadBooleanValue(value) => {
+                write!(f, "Bad boolean value: {}", value)
+            }
             ASNError::EmptySequence => {
                 f.write_str("empty sequence")
             }

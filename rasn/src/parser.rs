@@ -33,6 +33,15 @@ fn parse_null(contents: &[u8]) -> ASNResult {
     }
 }
 
+fn parse_boolean(contents: &[u8]) -> ASNResult {
+    match contents {
+        [0xFF] => Ok(ASNType::Boolean(true)),
+        [0x00] => Ok(ASNType::Boolean(false)),
+        [x] => Err(ASNError::BadBooleanValue(*x)),
+        _ => Err(ASNError::BadBooleanLength(contents.len()))
+    }
+}
+
 fn parse_integer(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Err(ASNError::ZeroLengthInteger)
@@ -182,6 +191,7 @@ fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
             let contents = get_contents(reader)?;
 
             match tag {
+                0x01 => parse_boolean(contents),
                 0x02 => parse_integer(contents),
                 0x03 => parse_bit_string(contents),
                 0x04 => Ok(ASNType::OctetString(contents)),
