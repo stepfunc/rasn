@@ -1,6 +1,7 @@
 use types::{ASNBitString, ASNError, ASNInteger, ASNType, ASNObjectIdentifier};
 use parser::{Parser, parse_all};
 use printer::{Printable, LinePrinter, print_type};
+use extensions::{Extension};
 
 #[derive(Debug)]
 pub struct Constructed<'a, T> {
@@ -30,20 +31,25 @@ impl<'a> Printable for Certificate<'a> {
     }
 }
 
+impl<'a> Printable for &'a [u8] {
+    fn print(&self, printer: &mut LinePrinter) -> () {
+        for chunk in self.chunks(16) {
+            printer.begin_line();
+            if let Some((last, first)) = chunk.split_last() {
+                for byte in first {
+                    printer.print_fmt(&format_args!("{:02X}:", byte));
+                }
+                printer.println_fmt(&format_args!("{:02X}", last));
+            }
+        }
+    }
+}
+
 impl<'a> Printable for ASNBitString<'a> {
     fn print(&self, printer: &mut LinePrinter) -> () {
         if let Some(octets) = self.octets() {
-            for chunk in octets.chunks(16) {
-                printer.begin_line();
-                if let Some((last, first)) = chunk.split_last() {
-                    for byte in first {
-                        printer.print_fmt(&format_args!("{:02X}:", byte));
-                    }
-                    printer.println_fmt(&format_args!("{:02X}", last));
-                }
-            }
+            octets.print(printer);
         }
-
     }
 }
 
@@ -75,7 +81,10 @@ pub struct TBSCertificate<'a> {
     pub issuer : Name<'a>,
     pub validity: Validity,
     pub subject : Name<'a>,
-    pub subject_public_key_info : SubjectPublicKeyInfo<'a>
+    pub subject_public_key_info : SubjectPublicKeyInfo<'a>,
+    pub issuer_unique_id : Option<ASNBitString<'a>>,
+    pub subject_unique_id : Option<ASNBitString<'a>>,
+    pub extensions : Vec<Extension<'a>>,
 }
 
 impl<'a> Printable for TBSCertificate<'a> {
@@ -92,6 +101,20 @@ impl<'a> Printable for TBSCertificate<'a> {
         print_type("validity", &self.validity, printer);
         print_type("subject", &self.subject, printer);
         print_type("subject public key info", &self.subject_public_key_info, printer);
+        if let Some(issuer_unique_id) = &self.issuer_unique_id { print_type("issuer unique ID", issuer_unique_id, printer); }
+        if let Some(subject_unique_id) = &self.subject_unique_id { print_type("subject unique ID", subject_unique_id, printer); }
+
+        if !self.extensions.is_empty() {
+            printer.begin_line();
+            printer.println_str("Extensions");
+
+            printer.begin_type();
+            for extension in &self.extensions {
+                extension.print(printer);
+            }
+            printer.end_type();
+        }
+
     }
 }
 
@@ -306,8 +329,11 @@ impl<'a> TBSCertificate<'a> {
                issuer : Name<'a>,
                validity: Validity,
                subject : Name<'a>,
-               subject_public_key_info : SubjectPublicKeyInfo<'a>) -> TBSCertificate<'a> {
-        TBSCertificate { version, serial_number, signature, issuer, validity, subject, subject_public_key_info }
+               subject_public_key_info : SubjectPublicKeyInfo<'a>,
+               issuer_unique_id : Option<ASNBitString<'a>>,
+               subject_unique_id : Option<ASNBitString<'a>>,
+               extensions : Vec<Extension<'a>>) -> TBSCertificate<'a> {
+        TBSCertificate { version, serial_number, signature, issuer, validity, subject, subject_public_key_info, issuer_unique_id, subject_unique_id, extensions }
     }
 
     fn parse(input: &[u8]) -> Result<Constructed<TBSCertificate>, ASNError> {
@@ -321,6 +347,34 @@ impl<'a> TBSCertificate<'a> {
             }
         }
 
+        fn parse_optional_bitstring<'a>(parser: &mut Parser<'a>, tag: u8) -> Result<Option<ASNBitString<'a>>, ASNError> {
+            // TODO: check minimum version
+            match parser.get_optional_explicit_tag(tag)? {
+                Some(tag) => {
+                    let mut parser = Parser::new(tag.contents);
+                    let value = parser.expect_bit_string()?;
+                    parser.expect_end()?;
+                    Ok(Some(value))
+                }
+                None => Ok(None)
+            }
+        }
+
+        fn parse_extensions<'a>(parser: &mut Parser<'a>) -> Result<Vec<Extension<'a>>, ASNError> {
+            // TODO: check minimum version
+            let mut extensions: Vec<Extension> = Vec::new();
+            match parser.get_optional_explicit_tag(3)? {
+                Some(tag) => {
+                    let mut parser = Parser::unwrap_outer_sequence(tag.contents)?;
+                    while let Some(seq) = parser.expect_sequence_or_end()? {
+                        extensions.push(Extension::parse(seq)?);
+                    }
+                }
+                None => {}
+            };
+            Ok(extensions)
+        }
+
         let mut parser = Parser::new(input);
 
         let value = Constructed::new(
@@ -332,11 +386,12 @@ impl<'a> TBSCertificate<'a> {
                 Name::parse(parser.expect_sequence()?)?,
                 Validity::parse(parser.expect_sequence()?)?,
                 Name::parse(parser.expect_sequence()?)?,
-                SubjectPublicKeyInfo::parse(parser.expect_sequence()?)?
+                SubjectPublicKeyInfo::parse(parser.expect_sequence()?)?,
+                parse_optional_bitstring(&mut parser, 1)?,
+                parse_optional_bitstring(&mut parser, 2)?,
+                parse_extensions(&mut parser)?,
             )
         );
-
-        // TODO - handle optional fields!
 
         parser.expect_end()?;
 

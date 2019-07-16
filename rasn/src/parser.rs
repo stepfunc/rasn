@@ -261,6 +261,15 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn get_optional_boolean_or_default(&mut self, default: bool) -> Result<bool, ASNError> {
+        let id = Identifier::from(self.reader.peek_or_fail()?);
+
+        match id {
+            Identifier{ class: TagClass::Universal, pc: PC::Primitive, tag: 0x01 }  => Ok(self.expect_boolean()?),
+            _ => Ok(default),
+        }
+    }
+
     pub fn get_explicitly_tagged_integer_or_default(&mut self, tag: u8, default: i32) -> Result<i32, ASNError> {
         match self.get_optional_explicit_tag(tag)? {
             Some(tag) => {
@@ -311,6 +320,15 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn expect_sequence_or_end(&mut self) -> Result<Option<&'a[u8]>, ASNError> {
+        match self.next() {
+            Some(Ok(ASNType::Sequence(contents))) => Ok(Some(contents)),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Sequence, asn.get_id())),
+            Some(Err(err)) => Err(err),
+            None => Ok(None)
+        }
+    }
+
     pub fn expect_set(&mut self) -> Result<&'a[u8], ASNError> {
         match self.next() {
             Some(Ok(ASNType::Set(contents))) => Ok(contents),
@@ -329,10 +347,28 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn expect_boolean(&mut self) -> Result<bool, ASNError> {
+        match self.next() {
+            Some(Ok(ASNType::Boolean(x))) => Ok(x),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Boolean, asn.get_id())),
+            Some(Err(err)) => Err(err),
+            None => Err(ASNError::EndOfStream)
+        }
+    }
+
     pub fn expect_integer(&mut self) -> Result<ASNInteger<'a>, ASNError> {
         match self.next() {
             Some(Ok(ASNType::Integer(x))) => Ok(x),
             Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Integer, asn.get_id())),
+            Some(Err(err)) => Err(err),
+            None => Err(ASNError::EndOfStream)
+        }
+    }
+
+    pub fn expect_octet_string(&mut self) -> Result<&'a[u8], ASNError> {
+        match self.next() {
+            Some(Ok(ASNType::OctetString(os))) => Ok(os),
+            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::OctetString, asn.get_id())),
             Some(Err(err)) => Err(err),
             None => Err(ASNError::EndOfStream)
         }

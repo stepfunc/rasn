@@ -119,6 +119,42 @@ impl<'a> ASNBitString<'a> {
             None
         }
     }
+
+    pub fn size(&self) -> usize {
+        self.bytes.len() * 8 - (self.unused_bits as usize)
+    }
+
+    pub fn iter(&'a self) -> ASNBitStringIterator<'a> {
+        ASNBitStringIterator::new(&self)
+    }
+}
+
+pub struct ASNBitStringIterator<'a> {
+    bit_string: &'a ASNBitString<'a>,
+    current_bit: usize,
+}
+
+impl<'a> ASNBitStringIterator<'a> {
+    fn new(bit_string: &'a ASNBitString<'a>) -> ASNBitStringIterator<'a> {
+        ASNBitStringIterator {
+            bit_string,
+            current_bit: 0
+        }
+    }
+}
+
+impl<'a> Iterator for ASNBitStringIterator<'a> {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_bit < self.bit_string.size() {
+            let result = Some(self.bit_string.bytes[self.current_bit / 8] << ((self.current_bit % 8) as u8) & 0x80 != 0);
+            self.current_bit += 1;
+            result
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -294,7 +330,8 @@ pub enum ASNError {
     UnexpectedType(ASNTypeId, ASNTypeId),  // the expected type followed by the actual type
     ExpectedEnd(ASNTypeId),                // type present instead of end
     IntegerTooLarge(usize),                // count of bytes
-    BadEnumValue(&'static str, i32)        // name of the enum and the bad integer value
+    BadEnumValue(&'static str, i32),       // name of the enum and the bad integer value
+    UnexpectedOid(ASNObjectIdentifier),    // unexpected object identifier
 }
 
 impl std::convert::From<reader::EndOfStream> for ASNError {
@@ -371,6 +408,9 @@ impl std::fmt::Display for ASNError {
             }
             ASNError::BadEnumValue(name, value) => {
                 write!(f, "The enum '{}' has not mapping for value {}", name, value)
+            }
+            ASNError::UnexpectedOid(oid) => {
+                write!(f, "The Object Identifier '{}' was unexpected.", oid)
             }
         }
     }

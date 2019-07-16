@@ -1,6 +1,7 @@
 extern crate chrono;
 extern crate core;
 
+pub mod extensions;
 pub mod oid;
 pub mod reader;
 pub mod types;
