@@ -279,17 +279,20 @@ impl<'a> Parser<'a> {
         Ok(Parser::new(bytes))
     }
 
-    pub fn get_explicitly_tagged_integer_or_default(&mut self, tag: u8, default: i32) -> Result<i32, ASNError> {
+    pub fn get_explicitly_tagged_value_or_default<T : ASNNewType<'a>>(&mut self, tag: u8, default: T::Item) -> Result<T::Item, ASNError> {
+        match self.get_optional_explicit_tag_value::<T>(tag)? {
+            Some(item) => Ok(item),
+            None => Ok(default)
+        }
+    }
+
+    pub fn get_optional_explicit_tag_value<T : ASNNewType<'a>>(&mut self, tag: u8) -> Result<Option<T::Item>, ASNError> {
         match self.get_optional_explicit_tag(tag)? {
             Some(tag) => {
                 let mut parser = Parser::new(tag.contents);
-                let value = parser.expect::<Integer>()?;
-                match value.as_i32() {
-                    Some(x) => Ok(x),
-                    None => Err(ASNError::IntegerTooLarge(value.bytes.len()))
-                }
+                Ok(Some(parser.expect::<T>()?))
             },
-            None => Ok(default)
+            None => Ok(None)
         }
     }
 

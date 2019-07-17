@@ -339,11 +339,15 @@ impl<'a> TBSCertificate<'a> {
     fn parse(input: &[u8]) -> Result<Constructed<TBSCertificate>, ASNError> {
 
         fn parse_version(parser: &mut Parser) -> Result<Version, ASNError> {
-            match parser.get_explicitly_tagged_integer_or_default(0, 0)? {
-                0 => Ok(Version::V1),
-                1 => Ok(Version::V2),
-                2 => Ok(Version::V3),
-                x => Err(ASNError::BadEnumValue("version", x))
+            match parser.get_optional_explicit_tag_value::<Integer>(0)? {
+                Some(value) => match value.as_i32() {
+                    Some(0) => Ok(Version::V1),
+                    Some(1) => Ok(Version::V2),
+                    Some(2) => Ok(Version::V3),
+                    Some(x) => Err(ASNError::BadEnumValue("version", x)),
+                    None => Err(ASNError::IntegerTooLarge(value.bytes.len()))
+                },
+                None => Ok(Version::V1)
             }
         }
 
