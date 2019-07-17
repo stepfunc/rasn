@@ -204,7 +204,7 @@ impl Display for ASNObjectIdentifier {
     }
 }
 
-pub trait ASNNewType<'a> {
+pub trait ASNWrapperType<'a> {
     type Item;
 
     //fn new<'b>(value: Self::Item) -> ASNType<'b>;
@@ -221,7 +221,7 @@ impl Boolean {
         ASNType::Boolean(Boolean { value })
     }
 }
-impl<'a> ASNNewType<'a> for Boolean {
+impl<'a> ASNWrapperType<'a> for Boolean {
     type Item = bool;
 
     fn get_id() -> ASNTypeId {
@@ -245,7 +245,7 @@ impl<'a> Integer<'a> {
         ASNType::Integer(Integer { value })
     }
 }
-impl<'a> ASNNewType<'a> for Integer<'a> {
+impl<'a> ASNWrapperType<'a> for Integer<'a> {
     type Item = ASNInteger<'a>;
 
     fn get_id() -> ASNTypeId {
@@ -269,7 +269,7 @@ impl<'a> Sequence<'a> {
         ASNType::Sequence(Sequence { value })
     }
 }
-impl<'a> ASNNewType<'a> for Sequence<'a> {
+impl<'a> ASNWrapperType<'a> for Sequence<'a> {
     type Item = &'a [u8];
 
     fn get_id() -> ASNTypeId {
@@ -293,7 +293,7 @@ impl<'a> Set<'a> {
         ASNType::Set(Set { value })
     }
 }
-impl<'a> ASNNewType<'a> for Set<'a> {
+impl<'a> ASNWrapperType<'a> for Set<'a> {
     type Item = &'a [u8];
 
     fn get_id() -> ASNTypeId {
@@ -317,7 +317,7 @@ impl ObjectIdentifier {
         ASNType::ObjectIdentifier(ObjectIdentifier { value })
     }
 }
-impl<'a> ASNNewType<'a> for ObjectIdentifier {
+impl<'a> ASNWrapperType<'a> for ObjectIdentifier {
     type Item = ASNObjectIdentifier;
 
     fn get_id() -> ASNTypeId {
@@ -341,7 +341,7 @@ impl<'a> OctetString<'a> {
         ASNType::OctetString(OctetString { value })
     }
 }
-impl<'a> ASNNewType<'a> for OctetString<'a> {
+impl<'a> ASNWrapperType<'a> for OctetString<'a> {
     type Item = &'a [u8];
 
     fn get_id() -> ASNTypeId {
@@ -365,7 +365,7 @@ impl<'a> BitString<'a> {
         ASNType::BitString(BitString { value })
     }
 }
-impl<'a> ASNNewType<'a> for BitString<'a> {
+impl<'a> ASNWrapperType<'a> for BitString<'a> {
     type Item = ASNBitString<'a>;
 
     fn get_id() -> ASNTypeId {
@@ -389,7 +389,7 @@ impl UtcTime {
         ASNType::UTCTime(UtcTime { value })
     }
 }
-impl<'a> ASNNewType<'a> for UtcTime {
+impl<'a> ASNWrapperType<'a> for UtcTime {
     type Item = DateTime<FixedOffset>;
 
     fn get_id() -> ASNTypeId {
@@ -413,7 +413,7 @@ impl<'a> ExplicitTag<'a> {
         ASNType::ExplicitTag(ExplicitTag { value })
     }
 }
-impl<'a> ASNNewType<'a> for ExplicitTag<'a> {
+impl<'a> ASNWrapperType<'a> for ExplicitTag<'a> {
     type Item = ASNExplicitTag<'a>;
 
     fn get_id() -> ASNTypeId {

@@ -279,14 +279,14 @@ impl<'a> Parser<'a> {
         Ok(Parser::new(bytes))
     }
 
-    pub fn get_explicitly_tagged_value_or_default<T : ASNNewType<'a>>(&mut self, tag: u8, default: T::Item) -> Result<T::Item, ASNError> {
+    pub fn get_explicitly_tagged_value_or_default<T : ASNWrapperType<'a>>(&mut self, tag: u8, default: T::Item) -> Result<T::Item, ASNError> {
         match self.get_optional_explicit_tag_value::<T>(tag)? {
             Some(item) => Ok(item),
             None => Ok(default)
         }
     }
 
-    pub fn get_optional_explicit_tag_value<T : ASNNewType<'a>>(&mut self, tag: u8) -> Result<Option<T::Item>, ASNError> {
+    pub fn get_optional_explicit_tag_value<T : ASNWrapperType<'a>>(&mut self, tag: u8) -> Result<Option<T::Item>, ASNError> {
         match self.get_optional_explicit_tag(tag)? {
             Some(tag) => {
                 let mut parser = Parser::new(tag.contents);
@@ -310,14 +310,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn get_optional_or_default<T : ASNNewType<'a>>(&mut self, default: T::Item) -> Result<T::Item, ASNError> {
+    pub fn get_optional_or_default<T : ASNWrapperType<'a>>(&mut self, default: T::Item) -> Result<T::Item, ASNError> {
         match self.get_optional::<T>()? {
             Some(value) => Ok(value),
             None => Ok(default),
         }
     }
 
-    pub fn get_optional<T : ASNNewType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
+    pub fn get_optional<T : ASNWrapperType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
         if self.reader.is_empty() {
             return Ok(None);
         }
@@ -331,7 +331,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn expect<T : ASNNewType<'a>>(&mut self) -> Result<T::Item, ASNError> {
+    pub fn expect<T : ASNWrapperType<'a>>(&mut self) -> Result<T::Item, ASNError> {
         match self.expect_any() {
             Ok(asn_type) => {
                 let id = asn_type.get_id();
@@ -344,7 +344,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn expect_or_end<T : ASNNewType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
+    pub fn expect_or_end<T : ASNWrapperType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
         match self.expect::<T>() {
             Ok(value) => Ok(Some(value)),
             Err(ASNError::EndOfStream) => Ok(None),
