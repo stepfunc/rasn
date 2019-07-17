@@ -3,6 +3,7 @@ extern crate chrono;
 use reader;
 use oid::get_oid;
 use std::fmt::Display;
+use chrono::{DateTime, FixedOffset};
 
 #[derive(Debug, PartialEq)]
 pub struct ASNInteger<'a> {
@@ -203,21 +204,245 @@ impl Display for ASNObjectIdentifier {
     }
 }
 
+pub trait ASNNewType<'a> {
+    type Item;
+
+    //fn new<'b>(value: Self::Item) -> ASNType<'b>;
+    fn get_id() -> ASNTypeId;
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item>;
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Boolean {
+    pub value: bool
+}
+impl Boolean {
+    pub fn new<'a>(value: bool) -> ASNType<'a> {
+        ASNType::Boolean(Boolean { value })
+    }
+}
+impl<'a> ASNNewType<'a> for Boolean {
+    type Item = bool;
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::Boolean
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::Boolean(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Integer<'a> {
+    pub value: ASNInteger<'a>
+}
+impl<'a> Integer<'a> {
+    pub fn new(value: ASNInteger<'a>) -> ASNType<'a> {
+        ASNType::Integer(Integer { value })
+    }
+}
+impl<'a> ASNNewType<'a> for Integer<'a> {
+    type Item = ASNInteger<'a>;
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::Integer
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::Integer(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Sequence<'a> {
+    pub value: &'a [u8]
+}
+impl<'a> Sequence<'a> {
+    pub fn new(value: &'a [u8]) -> ASNType<'a> {
+        ASNType::Sequence(Sequence { value })
+    }
+}
+impl<'a> ASNNewType<'a> for Sequence<'a> {
+    type Item = &'a [u8];
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::Sequence
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::Sequence(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Set<'a> {
+    pub value: &'a [u8]
+}
+impl<'a> Set<'a> {
+    pub fn new(value: &'a [u8]) -> ASNType<'a> {
+        ASNType::Set(Set { value })
+    }
+}
+impl<'a> ASNNewType<'a> for Set<'a> {
+    type Item = &'a [u8];
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::Set
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::Set(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ObjectIdentifier {
+    pub value: ASNObjectIdentifier
+}
+impl ObjectIdentifier {
+    pub fn new<'a>(value: ASNObjectIdentifier) -> ASNType<'a> {
+        ASNType::ObjectIdentifier(ObjectIdentifier { value })
+    }
+}
+impl<'a> ASNNewType<'a> for ObjectIdentifier {
+    type Item = ASNObjectIdentifier;
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::ObjectIdentifier
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::ObjectIdentifier(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OctetString<'a> {
+    pub value: &'a [u8]
+}
+impl<'a> OctetString<'a> {
+    pub fn new(value: &'a [u8]) -> ASNType<'a> {
+        ASNType::OctetString(OctetString { value })
+    }
+}
+impl<'a> ASNNewType<'a> for OctetString<'a> {
+    type Item = &'a [u8];
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::OctetString
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::OctetString(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct BitString<'a> {
+    pub value: ASNBitString<'a>
+}
+impl<'a> BitString<'a> {
+    pub fn new(value: ASNBitString<'a>) -> ASNType<'a> {
+        ASNType::BitString(BitString { value })
+    }
+}
+impl<'a> ASNNewType<'a> for BitString<'a> {
+    type Item = ASNBitString<'a>;
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::BitString
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::BitString(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct UtcTime {
+    pub value: DateTime<FixedOffset>
+}
+impl UtcTime {
+    pub fn new<'a>(value: DateTime<FixedOffset>) -> ASNType<'a> {
+        ASNType::UTCTime(UtcTime { value })
+    }
+}
+impl<'a> ASNNewType<'a> for UtcTime {
+    type Item = DateTime<FixedOffset>;
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::UTCTime
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::UTCTime(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ExplicitTag<'a> {
+    pub value: ASNExplicitTag<'a>
+}
+impl<'a> ExplicitTag<'a> {
+    pub fn new(value: ASNExplicitTag<'a>) -> ASNType<'a> {
+        ASNType::ExplicitTag(ExplicitTag { value })
+    }
+}
+impl<'a> ASNNewType<'a> for ExplicitTag<'a> {
+    type Item = ASNExplicitTag<'a>;
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::ExplicitTag
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::ExplicitTag(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum ASNType<'a> {
-    Boolean(bool),
-    Sequence(&'a[u8]),             // the interior data of the sequence
-    Set(&'a[u8]),                  // the interior data of the set
-    Integer(ASNInteger<'a>),
+    Boolean(Boolean),
+    Sequence(Sequence<'a>),
+    Set(Set<'a>),
+    Integer(Integer<'a>),
     PrintableString(&'a str),
     IA5String(&'a str),
     UTF8String(&'a str),
     Null,
-    UTCTime(chrono::DateTime<chrono::FixedOffset>),
-    BitString(ASNBitString<'a>),
-    OctetString(&'a[u8]),
-    ObjectIdentifier(ASNObjectIdentifier),
-    ExplicitTag(ASNExplicitTag<'a>)       // the tag value and the data
+    UTCTime(UtcTime),
+    BitString(BitString<'a>),
+    OctetString(OctetString<'a>),
+    ObjectIdentifier(ObjectIdentifier),
+    ExplicitTag(ExplicitTag<'a>)
 }
 
 // An identifier for the type that carries no data
@@ -262,8 +487,8 @@ impl<'a> ASNType<'a> {
 impl<'a> std::fmt::Display for ASNType<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ASNType::Boolean(value) => {
-                write!(f, "Boolean: {}", value)
+            ASNType::Boolean(wrapper) => {
+                write!(f, "Boolean: {}", wrapper.value)
             }
             ASNType::Sequence(_) => {
                 write!(f, "Sequence")
@@ -283,15 +508,15 @@ impl<'a> std::fmt::Display for ASNType<'a> {
                 f.write_str("IA5String: ")?;
                 f.write_str(s)
             },
-            ASNType::Integer(cell) => write!(f, "Integer: {}", cell),
+            ASNType::Integer(wrapper) => write!(f, "Integer: {}", wrapper.value),
             ASNType::Null => {
                 f.write_str("Null")
             },
-            ASNType::ObjectIdentifier(id) => {
-                write!(f, "ObjectIdentifier: {}", id)
+            ASNType::ObjectIdentifier(wrapper) => {
+                write!(f, "ObjectIdentifier: {}", wrapper.value)
             }
-            ASNType::UTCTime(value) => {
-                write!(f, "UTCTime: {}", value)
+            ASNType::UTCTime(wrapper) => {
+                write!(f, "UTCTime: {}", wrapper.value)
             }
             ASNType::BitString(_) => {
                 f.write_str("BitString")
@@ -299,11 +524,10 @@ impl<'a> std::fmt::Display for ASNType<'a> {
             ASNType::OctetString(_) => {
                 f.write_str("OctetString")
             }
-            ASNType::ExplicitTag(tag) => {
-                write!(f,"[{}]", tag.value)
+            ASNType::ExplicitTag(wrapper) => {
+                write!(f,"[{}]", wrapper.value.value)
             }
         }
-
     }
 }
 

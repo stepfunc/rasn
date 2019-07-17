@@ -3,8 +3,8 @@ use chrono;
 use std::str;
 
 use reader::Reader;
-use types::{Identifier, TagClass, PC, ASNError, ASNType, ASNInteger, ASNBitString, ASNObjectIdentifier, ASNTypeId, ASNExplicitTag};
-use chrono::{DateTime, FixedOffset};
+use types::*;
+use types::ASNError::UnsupportedId;
 
 type ASNResult<'a> = Result<ASNType<'a>, ASNError>;
 
@@ -12,7 +12,7 @@ fn parse_seq(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Err(ASNError::EmptySequence)
     } else {
-        Ok(ASNType::Sequence(contents))
+        Ok(Sequence::new(contents))
     }
 }
 
@@ -20,7 +20,7 @@ fn parse_set(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Err(ASNError::EmptySet)
     } else {
-        Ok(ASNType::Set(contents))
+        Ok(Set::new(contents))
     }
 }
 
@@ -35,8 +35,8 @@ fn parse_null(contents: &[u8]) -> ASNResult {
 
 fn parse_boolean(contents: &[u8]) -> ASNResult {
     match contents {
-        [0xFF] => Ok(ASNType::Boolean(true)),
-        [0x00] => Ok(ASNType::Boolean(false)),
+        [0xFF] => Ok(Boolean::new(true)),
+        [0x00] => Ok(Boolean::new(false)),
         [x] => Err(ASNError::BadBooleanValue(*x)),
         _ => Err(ASNError::BadBooleanLength(contents.len()))
     }
@@ -47,7 +47,7 @@ fn parse_integer(contents: &[u8]) -> ASNResult {
         Err(ASNError::ZeroLengthInteger)
     }
     else {
-        Ok(ASNType::Integer(ASNInteger::new(contents)))
+        Ok(Integer::new(ASNInteger::new(contents)))
     }
 }
 
@@ -68,7 +68,7 @@ fn parse_utc_time(contents: &[u8]) -> ASNResult {
     }
 
     match try_parse_all_variants(str::from_utf8(contents)?) {
-        Ok(time) => Ok(ASNType::UTCTime(time)),
+        Ok(time) => Ok(UtcTime::new(time)),
         Err(err) => Err(ASNError::BadUTCTime(err))
     }
 }
@@ -90,7 +90,7 @@ fn parse_bit_string(contents: &[u8]) -> ASNResult {
         return Err(ASNError::BitStringUnusedBitsTooLarge(unused_bits));
     }
 
-    Ok(ASNType::BitString(ASNBitString::new(unused_bits, &contents[1..])))
+    Ok(BitString::new(ASNBitString::new(unused_bits, &contents[1..])))
 }
 
 fn parse_object_identifier(contents: &[u8]) -> ASNResult {
@@ -131,7 +131,7 @@ fn parse_object_identifier(contents: &[u8]) -> ASNResult {
         items.push(parse_one(&mut reader)?);
     }
 
-    Ok(ASNType::ObjectIdentifier(ASNObjectIdentifier::new(items)))
+    Ok(ObjectIdentifier::new(ASNObjectIdentifier::new(items)))
 }
 
 fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
@@ -186,43 +186,65 @@ fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
 
     let id = Identifier::from(reader.read_byte()?);
 
-    match id {
-        Identifier{ class: TagClass::Universal, pc: PC::Primitive, tag} => {
+    match read_type(&id) {
+        Some(asn_type) => {
             let contents = get_contents(reader)?;
 
-            match tag {
-                0x01 => parse_boolean(contents),
-                0x02 => parse_integer(contents),
-                0x03 => parse_bit_string(contents),
-                0x04 => Ok(ASNType::OctetString(contents)),
-                0x05 => parse_null(contents),
-                0x06 => parse_object_identifier(contents),
-                0x0C => parse_string(contents, |s| ASNType::UTF8String(s)),
-                0x13 => parse_string(contents, |s| ASNType::PrintableString(s)),
-                0x16 => parse_string(contents, |s| ASNType::IA5String(s)),
-                0x17 => parse_utc_time(contents),
+            match asn_type {
+                ASNTypeId::Boolean => parse_boolean(contents),
+                ASNTypeId::Integer => parse_integer(contents),
+                ASNTypeId::BitString => parse_bit_string(contents),
+                ASNTypeId::OctetString => Ok(OctetString::new(contents)),
+                ASNTypeId::Null => parse_null(contents),
+                ASNTypeId::ObjectIdentifier => parse_object_identifier(contents),
+                ASNTypeId::UTF8String => parse_string(contents, |s| ASNType::UTF8String(s)),
+                ASNTypeId::PrintableString => parse_string(contents, |s| ASNType::PrintableString(s)),
+                ASNTypeId::IA5String => parse_string(contents, |s| ASNType::IA5String(s)),
+                ASNTypeId::UTCTime => parse_utc_time(contents),
 
-                _ => Err(ASNError::UnsupportedId(id))
+                ASNTypeId::Sequence => parse_seq(contents),
+                ASNTypeId::Set => parse_set(contents),
+
+                ASNTypeId::ExplicitTag => Ok(ExplicitTag::new(ASNExplicitTag::new(id.tag, contents)))
+            }
+        },
+        None => Err(ASNError::UnsupportedId(id))
+    }
+}
+
+fn read_type(id: &Identifier) -> Option<ASNTypeId> {
+    match id {
+        Identifier{ class: TagClass::Universal, pc: PC::Primitive, tag} => {
+            match tag {
+                0x01 => Some(ASNTypeId::Boolean),
+                0x02 => Some(ASNTypeId::Integer),
+                0x03 => Some(ASNTypeId::BitString),
+                0x04 => Some(ASNTypeId::OctetString),
+                0x05 => Some(ASNTypeId::Null),
+                0x06 => Some(ASNTypeId::ObjectIdentifier),
+                0x0C => Some(ASNTypeId::UTF8String),
+                0x13 => Some(ASNTypeId::PrintableString),
+                0x16 => Some(ASNTypeId::IA5String),
+                0x17 => Some(ASNTypeId::UTCTime),
+
+                _ => None
             }
         },
         Identifier{ class: TagClass::Universal, pc: PC::Constructed, tag} => {
-            let contents = get_contents(reader)?;
-
             match tag {
 
-                0x10 => parse_seq(contents),
-                0x11 => parse_set(contents),
+                0x10 => Some(ASNTypeId::Sequence),
+                0x11 => Some(ASNTypeId::Set),
 
-                _ => Err(ASNError::UnsupportedId(id))
+                _ => None
             }
         },
 
-        Identifier{ class: TagClass::ContextSpecific, pc: PC::Constructed, tag} => {
-            let contents = get_contents(reader)?;
-            Ok(ASNType::ExplicitTag(ASNExplicitTag::new(tag, contents)))
+        Identifier{ class: TagClass::ContextSpecific, pc: PC::Constructed, tag: _} => {
+            Some(ASNTypeId::ExplicitTag)
         },
 
-        _ => Err(ASNError::UnsupportedId(id))
+        _ => None
     }
 }
 
@@ -243,38 +265,25 @@ impl<'a> Parser<'a> {
         Parser { reader: Reader::new(input) }
     }
 
-    pub fn get_optional_explicit_tag(&mut self, tag: u8) -> Result<Option<ASNExplicitTag<'a>>, ASNError> {
-        if self.reader.is_empty() {
-            return Ok(None);
-        }
-
-        let id = Identifier::from(self.reader.peek_or_fail()?);
-
-        if id.tag != tag {
-            return Ok(None);
-        }
-
-        if let Identifier { class: TagClass::ContextSpecific, pc: PC::Constructed, tag: _ } = id {
-            Ok(Some(self.expect_explicit_tag()?))
-        } else {
-            Ok(None)
-        }
+    pub fn unwrap_outer_sequence(input: &'a[u8]) -> Result<Parser, ASNError> {
+        let mut parser = Parser::new(input);
+        let bytes = parser.expect::<Sequence>()?;
+        parser.expect_end()?;
+        Ok(Parser::new(bytes))
     }
 
-    pub fn get_optional_boolean_or_default(&mut self, default: bool) -> Result<bool, ASNError> {
-        let id = Identifier::from(self.reader.peek_or_fail()?);
-
-        match id {
-            Identifier{ class: TagClass::Universal, pc: PC::Primitive, tag: 0x01 }  => Ok(self.expect_boolean()?),
-            _ => Ok(default),
-        }
+    pub fn unwrap_outer_set(input: &'a[u8]) -> Result<Parser, ASNError> {
+        let mut parser = Parser::new(input);
+        let bytes = parser.expect::<Set>()?;
+        parser.expect_end()?;
+        Ok(Parser::new(bytes))
     }
 
     pub fn get_explicitly_tagged_integer_or_default(&mut self, tag: u8, default: i32) -> Result<i32, ASNError> {
         match self.get_optional_explicit_tag(tag)? {
             Some(tag) => {
                 let mut parser = Parser::new(tag.contents);
-                let value = parser.expect_integer()?;
+                let value = parser.expect::<Integer>()?;
                 match value.as_i32() {
                     Some(x) => Ok(x),
                     None => Err(ASNError::IntegerTooLarge(value.bytes.len()))
@@ -284,119 +293,59 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn unwrap_outer_sequence(input: &'a[u8]) -> Result<Parser, ASNError> {
-        let mut parser = Parser::new(input);
-        let bytes = parser.expect_sequence()?;
-        parser.expect_end()?;
-        Ok(Parser::new(bytes))
-    }
+    pub fn get_optional_explicit_tag(&mut self, tag: u8) -> Result<Option<ASNExplicitTag<'a>>, ASNError> {
+        if self.reader.is_empty() {
+            return Ok(None);
+        }
 
-    pub fn unwrap_outer_set(input: &'a[u8]) -> Result<Parser, ASNError> {
-        let mut parser = Parser::new(input);
-        let bytes = parser.expect_set()?;
-        parser.expect_end()?;
-        Ok(Parser::new(bytes))
-    }
+        let id = Identifier::from(self.reader.peek_or_fail()?);
 
-    pub fn is_empty(&self) -> bool {
-        self.reader.is_empty()
-    }
-
-    pub fn expect_explicit_tag(&mut self) -> Result<ASNExplicitTag<'a>, ASNError> {
-        match self.next() {
-            Some(Ok(ASNType::ExplicitTag(tag))) => Ok(tag),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::ExplicitTag, asn.get_id())),
-            Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream)
+        match read_type(&id) {
+            Some(ASNTypeId::ExplicitTag) if id.tag == tag => Ok(Some(self.expect::<ExplicitTag>()?)),
+            Some(_) => Ok(None),
+            None => Err(UnsupportedId(id)),
         }
     }
 
-    pub fn expect_sequence(&mut self) -> Result<&'a[u8], ASNError> {
-        match self.next() {
-            Some(Ok(ASNType::Sequence(contents))) => Ok(contents),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Sequence, asn.get_id())),
-            Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream)
+    pub fn get_optional_or_default<T : ASNNewType<'a>>(&mut self, default: T::Item) -> Result<T::Item, ASNError> {
+        match self.get_optional::<T>()? {
+            Some(value) => Ok(value),
+            None => Ok(default),
         }
     }
 
-    pub fn expect_sequence_or_end(&mut self) -> Result<Option<&'a[u8]>, ASNError> {
-        match self.next() {
-            Some(Ok(ASNType::Sequence(contents))) => Ok(Some(contents)),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Sequence, asn.get_id())),
-            Some(Err(err)) => Err(err),
-            None => Ok(None)
+    pub fn get_optional<T : ASNNewType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
+        if self.reader.is_empty() {
+            return Ok(None);
+        }
+
+        let id = Identifier::from(self.reader.peek_or_fail()?);
+
+        match read_type(&id) {
+            Some(ref id) if *id == T::get_id() => Ok(Some(self.expect::<T>()?)),
+            Some(_) => Ok(None),
+            None => Err(UnsupportedId(id)),
         }
     }
 
-    pub fn expect_set(&mut self) -> Result<&'a[u8], ASNError> {
-        match self.next() {
-            Some(Ok(ASNType::Set(contents))) => Ok(contents),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Set, asn.get_id())),
-            Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream)
+    pub fn expect<T : ASNNewType<'a>>(&mut self) -> Result<T::Item, ASNError> {
+        match self.expect_any() {
+            Ok(asn_type) => {
+                let id = asn_type.get_id();
+                match T::get_value(asn_type) {
+                    Some(value) => Ok(value),
+                    None => Err(ASNError::UnexpectedType(T::get_id(), id)),
+                }
+            }
+            Err(err) => Err(err),
         }
     }
 
-    pub fn expect_object_identifier(&mut self) -> Result<ASNObjectIdentifier, ASNError> {
-        match self.next() {
-            Some(Ok(ASNType::ObjectIdentifier(id))) => Ok(id),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::ObjectIdentifier,asn.get_id())),
-            Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream)
-        }
-    }
-
-    pub fn expect_boolean(&mut self) -> Result<bool, ASNError> {
-        match self.next() {
-            Some(Ok(ASNType::Boolean(x))) => Ok(x),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Boolean, asn.get_id())),
-            Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream)
-        }
-    }
-
-    pub fn expect_integer(&mut self) -> Result<ASNInteger<'a>, ASNError> {
-        match self.next() {
-            Some(Ok(ASNType::Integer(x))) => Ok(x),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::Integer, asn.get_id())),
-            Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream)
-        }
-    }
-
-    pub fn expect_octet_string(&mut self) -> Result<&'a[u8], ASNError> {
-        match self.next() {
-            Some(Ok(ASNType::OctetString(os))) => Ok(os),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::OctetString, asn.get_id())),
-            Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream)
-        }
-    }
-
-    pub fn expect_bit_string(&mut self) -> Result<ASNBitString<'a>, ASNError> {
-        match self.next() {
-            Some(Ok(ASNType::BitString(bs))) => Ok(bs),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::BitString, asn.get_id())),
-            Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream)
-        }
-    }
-
-    pub fn expect_utc_time(&mut self) -> Result<DateTime<FixedOffset>, ASNError> {
-        match self.next() {
-            Some(Ok(ASNType::UTCTime(time))) => Ok(time),
-            Some(Ok(asn)) => Err(ASNError::UnexpectedType(ASNTypeId::UTCTime, asn.get_id())),
-            Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream)
-        }
-    }
-
-    pub fn expect_end(&mut self) -> Result<(), ASNError> {
-        match self.next() {
-            None => Ok(()),
-            Some(Err(err)) => Err(err),
-            Some(Ok(asn)) => Err(ASNError::ExpectedEnd(asn.get_id())),
+    pub fn expect_or_end<T : ASNNewType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
+        match self.expect::<T>() {
+            Ok(value) => Ok(Some(value)),
+            Err(ASNError::EndOfStream) => Ok(None),
+            Err(err) => Err(err),
         }
     }
 
@@ -415,13 +364,18 @@ impl<'a> Parser<'a> {
             None => Ok(None)
         }
     }
+
+    pub fn expect_end(&mut self) -> Result<(), ASNError> {
+        match self.next() {
+            None => Ok(()),
+            Some(Err(err)) => Err(err),
+            Some(Ok(asn)) => Err(ASNError::ExpectedEnd(asn.get_id())),
+        }
+    }
 }
 
-
 impl<'a> Iterator for Parser<'a> {
-
     type Item = Result<ASNType<'a>, ASNError>;
-
 
     fn next(&mut self) -> Option<Self::Item> {
 
@@ -439,15 +393,12 @@ impl<'a> Iterator for Parser<'a> {
     }
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
 
     use reader::Reader;
     use parser::*;
-    use types::*;
+    use types::{ASNError, Identifier, TagClass, PC, ASNExplicitTag, Sequence, ExplicitTag, UtcTime, ObjectIdentifier, ASNObjectIdentifier};
 
     const TOP_BIT: u8 = 1 << 7;
 
@@ -531,7 +482,7 @@ mod tests {
     #[test]
     fn parses_sequence_correctly() {
         let mut reader = Reader::new(&[0x30, 0x03, 0x02, 0x03, 0x04, 0x05, 0x06]);
-        assert_eq!(parse_one_type(&mut reader), Ok(ASNType::Sequence(&[0x02, 0x03, 0x04])));
+        assert_eq!(parse_one_type(&mut reader), Ok(Sequence::new(&[0x02, 0x03, 0x04])));
         assert_eq!(reader.remainder(), &[0x05, 0x06]);
     }
 
@@ -544,7 +495,7 @@ mod tests {
     #[test]
     fn parses_explicit_tag() {
         let mut reader = Reader::new(&[0xA1, 0x02, 0xCA, 0xFE]);
-        assert_eq!(parse_one_type(&mut reader), Ok(ASNType::ExplicitTag(ASNExplicitTag::new(1, &[0xCA, 0xFE]))));
+        assert_eq!(parse_one_type(&mut reader), Ok(ExplicitTag::new(ASNExplicitTag::new(1, &[0xCA, 0xFE]))));
     }
 
     #[test]
@@ -559,7 +510,7 @@ mod tests {
         fn test_variant(value: &str, seconds: u32) {
             assert_eq!(
                 parse_utc_time(value.as_bytes()),
-                Ok(ASNType::UTCTime(
+                Ok(UtcTime::new(
                     chrono::DateTime::from_utc(
                         chrono::NaiveDate::from_ymd(1999, 01, 02).and_hms(5, 23, seconds),
                         chrono::FixedOffset::east(0)
@@ -584,13 +535,13 @@ mod tests {
         // Microsoft: szOID_REQUEST_CLIENT_INFO
         assert_eq!(
             parse_object_identifier(&[0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x15, 0x14]),
-            Ok(ASNType::ObjectIdentifier(ASNObjectIdentifier::new([1, 3, 6, 1, 4, 1, 311, 21, 20].to_vec())))
+            Ok(ObjectIdentifier::new(ASNObjectIdentifier::new([1, 3, 6, 1, 4, 1, 311, 21, 20].to_vec())))
         );
 
         // sha1WithRSAEncryption
         assert_eq!(
             parse_object_identifier(&[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x05]),
-            Ok(ASNType::ObjectIdentifier(ASNObjectIdentifier::new([1, 2, 840, 113549, 1, 1, 5].to_vec())))
+            Ok(ObjectIdentifier::new(ASNObjectIdentifier::new([1, 2, 840, 113549, 1, 1, 5].to_vec())))
         );
     }
 }

@@ -1,4 +1,4 @@
-use types::{ASNObjectIdentifier, ASNError};
+use types::{ASNObjectIdentifier, ASNError, ObjectIdentifier, Boolean, OctetString, BitString};
 use parser::Parser;
 use printer::{Printable, LinePrinter, print_type};
 use std::fmt::Debug;
@@ -18,9 +18,9 @@ impl<'a> Extension<'a> {
     pub fn parse(input: &'a [u8]) -> Result<Extension, ASNError> {
         let mut parser = Parser::new(input);
 
-        let oid = parser.expect_object_identifier()?;
-        let is_critical = parser.get_optional_boolean_or_default(false)?;
-        let raw_content = parser.expect_octet_string()?;
+        let oid = parser.expect::<ObjectIdentifier>()?;
+        let is_critical = parser.get_optional_or_default::<Boolean>(false)?;
+        let raw_content = parser.expect::<OctetString>()?;
         parser.expect_end()?;
 
         let content: Box<dyn SpecificExtension> = match oid.values() {
@@ -100,8 +100,7 @@ impl ExtendedKeyUsage {
         let mut parser = Parser::unwrap_outer_sequence(input)?;
         let mut purposes: Vec<ExtendedKeyUsagePurpose> = Vec::new();
 
-        while !parser.is_empty() {
-            let oid = parser.expect_object_identifier()?;
+        while let Some(oid) = parser.expect_or_end::<ObjectIdentifier>()? {
             match ExtendedKeyUsagePurpose::from_id(&oid) {
                 Some(purpose) => purposes.push(purpose),
                 None => return Err(ASNError::UnexpectedOid(oid)),
@@ -142,22 +141,8 @@ impl SpecificExtension for KeyUsage {}
 
 impl KeyUsage {
     fn parse(input: &[u8]) -> Result<KeyUsage, ASNError> {
-        fn extract_bits(value: u8) -> KeyUsage {
-            KeyUsage {
-                digital_signature:  value & 0b00000001 != 0,
-                content_commitment: value & 0b00000010 != 0,
-                key_encipherment:   value & 0b00000100 != 0,
-                data_encipherment:  value & 0b00001000 != 0,
-                key_agreement:      value & 0b00010000 != 0,
-                key_cert_sign:      value & 0b00100000 != 0,
-                crl_sign:           value & 0b01000000 != 0,
-                encipher_only:      value & 0b10000000 != 0,
-                decipher_only: false,
-            }
-        }
-
         let mut parser = Parser::new(input);
-        let bit_string = parser.expect_bit_string()?;
+        let bit_string = parser.expect::<BitString>()?;
 
         let mut key_usage = KeyUsage {
             digital_signature: false,

@@ -18,19 +18,19 @@ pub fn parse_all(input: &[u8], handler: &mut dyn ParseHandler) -> Result<(), ASN
             Ok(asn) => {
                 handler.on_type(&asn);
                 match asn {
-                    ASNType::Sequence(contents) => {
+                    ASNType::Sequence(wrapper) => {
                         handler.begin_constructed();
-                        parse_all(contents, handler)?;
+                        parse_all(wrapper.value, handler)?;
                         handler.end_constructed();
                     }
-                    ASNType::ExplicitTag(tag) => {
+                    ASNType::ExplicitTag(wrapper) => {
                         handler.begin_constructed();
-                        parse_all(tag.contents, handler)?;
+                        parse_all(wrapper.value.contents, handler)?;
                         handler.end_constructed();
                     }
-                    ASNType::Set(contents) => {
+                    ASNType::Set(wrapper) => {
                         handler.begin_constructed();
-                        parse_all(contents, handler)?;
+                        parse_all(wrapper.value, handler)?;
                         handler.end_constructed();
                     }
                     _ => ()

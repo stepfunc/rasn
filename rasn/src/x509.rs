@@ -1,4 +1,4 @@
-use types::{ASNBitString, ASNError, ASNInteger, ASNType, ASNObjectIdentifier};
+use types::{ASNBitString, ASNError, ASNInteger, ASNType, ASNObjectIdentifier, UtcTime, ObjectIdentifier, Sequence, Set, BitString, Integer};
 use parser::{Parser, parse_all};
 use printer::{Printable, LinePrinter, print_type};
 use extensions::{Extension};
@@ -134,7 +134,7 @@ impl Validity {
     fn parse(input: &[u8]) -> Result<Validity, ASNError> {
 
         parse_all(input, |parser| {
-            Ok(Validity::new( parser.expect_utc_time()?,  parser.expect_utc_time()?))
+            Ok(Validity::new( parser.expect::<UtcTime>()?,  parser.expect::<UtcTime>()?))
         })
 
     }
@@ -166,7 +166,7 @@ impl<'a> AttributeTypeAndValue<'a> {
     fn parse(input: &'a [u8]) -> Result<AttributeTypeAndValue<'a>, ASNError> {
         let mut parser = Parser::new(input);
 
-        let value = AttributeTypeAndValue::new( parser.expect_object_identifier()?,  parser.expect_any()?);
+        let value = AttributeTypeAndValue::new( parser.expect::<ObjectIdentifier>()?,  parser.expect_any()?);
 
         parser.expect_end()?;
 
@@ -201,10 +201,10 @@ impl<'a> RelativeDistinguishedName<'a> {
         let mut entries : Vec<AttributeTypeAndValue> = Vec::new();
 
         // expect at least one entry!
-        entries.push(AttributeTypeAndValue::parse(parser.expect_sequence()?)?);
+        entries.push(AttributeTypeAndValue::parse(parser.expect::<Sequence>()?)?);
 
-        while !parser.is_empty() {
-            entries.push(AttributeTypeAndValue::parse(parser.expect_sequence()?)?);
+        while let Some(seq) = parser.expect_or_end::<Sequence>()? {
+            entries.push(AttributeTypeAndValue::parse(seq)?);
         }
 
         Ok(RelativeDistinguishedName::new(entries))
@@ -227,8 +227,8 @@ impl<'a> Name<'a> {
 
         let mut values : Vec<RelativeDistinguishedName> = Vec::new();
 
-        while !parser.is_empty() {
-            values.push( RelativeDistinguishedName::parse(parser.expect_set()?)?);
+        while let Some(set) = parser.expect_or_end::<Set>()? {
+            values.push( RelativeDistinguishedName::parse(set)?);
         }
 
         Ok(Name::new(values))
@@ -263,8 +263,8 @@ impl<'a> SubjectPublicKeyInfo<'a> {
         let mut parser = Parser::new(input);
 
         let value = SubjectPublicKeyInfo::new(
-            AlgorithmIdentifier::parse(parser.expect_sequence()?)?,
-            parser.expect_bit_string()?
+            AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
+            parser.expect::<BitString>()?
         );
 
         parser.expect_end()?;
@@ -286,9 +286,9 @@ impl<'a> Certificate<'a> {
         let mut parser = Parser::unwrap_outer_sequence(input)?;
 
         let value = Certificate::new(
-            TBSCertificate::parse(parser.expect_sequence()?)?,
-            AlgorithmIdentifier::parse(parser.expect_sequence()?)?,
-            parser.expect_bit_string()?
+            TBSCertificate::parse(parser.expect::<Sequence>()?)?,
+            AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
+            parser.expect::<BitString>()?
         );
 
         parser.expect_end()?;
@@ -311,7 +311,7 @@ impl<'a> AlgorithmIdentifier<'a> {
 
         let mut parser = Parser::new(input);
 
-        Ok(AlgorithmIdentifier::new(parser.expect_object_identifier()?, parser.expect_any_or_end()?))
+        Ok(AlgorithmIdentifier::new(parser.expect::<ObjectIdentifier>()?, parser.expect_any_or_end()?))
     }
 
     pub fn new(algorithm : ASNObjectIdentifier, parameters : Option<ASNType>) -> AlgorithmIdentifier {
@@ -352,7 +352,7 @@ impl<'a> TBSCertificate<'a> {
             match parser.get_optional_explicit_tag(tag)? {
                 Some(tag) => {
                     let mut parser = Parser::new(tag.contents);
-                    let value = parser.expect_bit_string()?;
+                    let value = parser.expect::<BitString>()?;
                     parser.expect_end()?;
                     Ok(Some(value))
                 }
@@ -366,7 +366,7 @@ impl<'a> TBSCertificate<'a> {
             match parser.get_optional_explicit_tag(3)? {
                 Some(tag) => {
                     let mut parser = Parser::unwrap_outer_sequence(tag.contents)?;
-                    while let Some(seq) = parser.expect_sequence_or_end()? {
+                    while let Some(seq) = parser.expect_or_end::<Sequence>()? {
                         extensions.push(Extension::parse(seq)?);
                     }
                 }
@@ -381,12 +381,12 @@ impl<'a> TBSCertificate<'a> {
             input,
             TBSCertificate::new(
                 parse_version(&mut parser)?,
-                parser.expect_integer()?,
-                AlgorithmIdentifier::parse(parser.expect_sequence()?)?,
-                Name::parse(parser.expect_sequence()?)?,
-                Validity::parse(parser.expect_sequence()?)?,
-                Name::parse(parser.expect_sequence()?)?,
-                SubjectPublicKeyInfo::parse(parser.expect_sequence()?)?,
+                parser.expect::<Integer>()?,
+                AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
+                Name::parse(parser.expect::<Sequence>()?)?,
+                Validity::parse(parser.expect::<Sequence>()?)?,
+                Name::parse(parser.expect::<Sequence>()?)?,
+                SubjectPublicKeyInfo::parse(parser.expect::<Sequence>()?)?,
                 parse_optional_bitstring(&mut parser, 1)?,
                 parse_optional_bitstring(&mut parser, 2)?,
                 parse_extensions(&mut parser)?,

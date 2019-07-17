@@ -30,8 +30,8 @@ impl ParseHandler for ParsePrinter {
         self.print_indent();
         println!("{}", asn);
         match asn {
-            ASNType::BitString(cell) => {
-                match cell.octets() {
+            ASNType::BitString(wrapper) => {
+                match wrapper.value.octets() {
                     Some(octets) => {
                         self.indent += 1;
                         for chunk in octets.chunks(16) {
