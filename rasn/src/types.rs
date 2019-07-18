@@ -261,6 +261,78 @@ impl<'a> ASNWrapperType<'a> for Integer<'a> {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct PrintableString<'a> {
+    pub value: &'a str
+}
+impl<'a> PrintableString<'a> {
+    pub fn new(value: &'a str) -> ASNType<'a> {
+        ASNType::PrintableString(PrintableString { value })
+    }
+}
+impl<'a> ASNWrapperType<'a> for PrintableString<'a> {
+    type Item = &'a str;
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::PrintableString
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::PrintableString(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct IA5String<'a> {
+    pub value: &'a str
+}
+impl<'a> IA5String<'a> {
+    pub fn new(value: &'a str) -> ASNType<'a> {
+        ASNType::IA5String(IA5String { value })
+    }
+}
+impl<'a> ASNWrapperType<'a> for IA5String<'a> {
+    type Item = &'a str;
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::IA5String
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::IA5String(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct UTF8String<'a> {
+    pub value: &'a str
+}
+impl<'a> UTF8String<'a> {
+    pub fn new(value: &'a str) -> ASNType<'a> {
+        ASNType::UTF8String(UTF8String { value })
+    }
+}
+impl<'a> ASNWrapperType<'a> for UTF8String<'a> {
+    type Item = &'a str;
+
+    fn get_id() -> ASNTypeId {
+        ASNTypeId::UTF8String
+    }
+
+    fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
+        match asn_type {
+            ASNType::UTF8String(wrapper) => Some(wrapper.value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Sequence<'a> {
     pub value: &'a [u8]
 }
@@ -434,9 +506,9 @@ pub enum ASNType<'a> {
     Sequence(Sequence<'a>),
     Set(Set<'a>),
     Integer(Integer<'a>),
-    PrintableString(&'a str),
-    IA5String(&'a str),
-    UTF8String(&'a str),
+    PrintableString(PrintableString<'a>),
+    IA5String(IA5String<'a>),
+    UTF8String(UTF8String<'a>),
     Null,
     UTCTime(UtcTime),
     BitString(BitString<'a>),
@@ -496,17 +568,17 @@ impl<'a> std::fmt::Display for ASNType<'a> {
             ASNType::Set(_) => {
                 write!(f, "Set")
             },
-            ASNType::UTF8String(s) => {
+            ASNType::UTF8String(wrapper) => {
                 f.write_str("UTF8String: ")?;
-                f.write_str(s)
+                f.write_str(wrapper.value)
             },
-            ASNType::PrintableString(s) => {
+            ASNType::PrintableString(wrapper) => {
                 f.write_str("PrintableString: ")?;
-                f.write_str(s)
+                f.write_str(wrapper.value)
             },
-            ASNType::IA5String(s) => {
+            ASNType::IA5String(wrapper) => {
                 f.write_str("IA5String: ")?;
-                f.write_str(s)
+                f.write_str(wrapper.value)
             },
             ASNType::Integer(wrapper) => write!(f, "Integer: {}", wrapper.value),
             ASNType::Null => {
@@ -536,8 +608,6 @@ pub enum ASNError {
     // these errors relate to core DER parsing
     BadBooleanLength(usize),
     BadBooleanValue(u8),
-    EmptySequence,
-    EmptySet,
     EndOfStream,
     ZeroLengthInteger,
     NullWithNonEmptyContents(usize),
@@ -556,6 +626,7 @@ pub enum ASNError {
     IntegerTooLarge(usize),                // count of bytes
     BadEnumValue(&'static str, i32),       // name of the enum and the bad integer value
     UnexpectedOid(ASNObjectIdentifier),    // unexpected object identifier
+    UnexpectedTag(u8),                     // unexpected tag
 }
 
 impl std::convert::From<reader::EndOfStream> for ASNError {
@@ -578,12 +649,6 @@ impl std::fmt::Display for ASNError {
             }
             ASNError::BadBooleanValue(value) => {
                 write!(f, "Bad boolean value: {}", value)
-            }
-            ASNError::EmptySequence => {
-                f.write_str("empty sequence")
-            }
-            ASNError::EmptySet => {
-                f.write_str("empty set")
             }
             ASNError::ZeroLengthInteger => {
                 f.write_str("zero length integer")
@@ -635,6 +700,9 @@ impl std::fmt::Display for ASNError {
             }
             ASNError::UnexpectedOid(oid) => {
                 write!(f, "The Object Identifier '{}' was unexpected.", oid)
+            }
+            ASNError::UnexpectedTag(tag) => {
+                write!(f, "The explicit tag '{}' was unexpected.", tag)
             }
         }
     }

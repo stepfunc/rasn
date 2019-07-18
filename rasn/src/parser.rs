@@ -9,19 +9,11 @@ use types::ASNError::UnsupportedId;
 type ASNResult<'a> = Result<ASNType<'a>, ASNError>;
 
 fn parse_seq(contents: &[u8]) -> ASNResult {
-    if contents.is_empty() {
-        Err(ASNError::EmptySequence)
-    } else {
-        Ok(Sequence::new(contents))
-    }
+    Ok(Sequence::new(contents))
 }
 
 fn parse_set(contents: &[u8]) -> ASNResult {
-    if contents.is_empty() {
-        Err(ASNError::EmptySet)
-    } else {
-        Ok(Set::new(contents))
-    }
+    Ok(Set::new(contents))
 }
 
 fn parse_null(contents: &[u8]) -> ASNResult {
@@ -178,54 +170,31 @@ fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
 }
 
 fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
-
-    fn get_contents<'a>(reader: &mut Reader<'a>) -> Result<&'a[u8], ASNError> {
-        let length = parse_length(reader)?;
-        Ok(reader.take(length)?)
-    }
-
     let id = Identifier::from(reader.read_byte()?);
 
     match read_type(&id) {
-        Some(asn_type) => {
+        Some((asn_type, tag)) => {
             let contents = get_contents(reader)?;
-
-            match asn_type {
-                ASNTypeId::Boolean => parse_boolean(contents),
-                ASNTypeId::Integer => parse_integer(contents),
-                ASNTypeId::BitString => parse_bit_string(contents),
-                ASNTypeId::OctetString => Ok(OctetString::new(contents)),
-                ASNTypeId::Null => parse_null(contents),
-                ASNTypeId::ObjectIdentifier => parse_object_identifier(contents),
-                ASNTypeId::UTF8String => parse_string(contents, |s| ASNType::UTF8String(s)),
-                ASNTypeId::PrintableString => parse_string(contents, |s| ASNType::PrintableString(s)),
-                ASNTypeId::IA5String => parse_string(contents, |s| ASNType::IA5String(s)),
-                ASNTypeId::UTCTime => parse_utc_time(contents),
-
-                ASNTypeId::Sequence => parse_seq(contents),
-                ASNTypeId::Set => parse_set(contents),
-
-                ASNTypeId::ExplicitTag => Ok(ExplicitTag::new(ASNExplicitTag::new(id.tag, contents)))
-            }
+            parse_content(&asn_type, tag, contents)
         },
         None => Err(ASNError::UnsupportedId(id))
     }
 }
 
-fn read_type(id: &Identifier) -> Option<ASNTypeId> {
+fn read_type(id: &Identifier) -> Option<(ASNTypeId, u8)> {
     match id {
         Identifier{ class: TagClass::Universal, pc: PC::Primitive, tag} => {
             match tag {
-                0x01 => Some(ASNTypeId::Boolean),
-                0x02 => Some(ASNTypeId::Integer),
-                0x03 => Some(ASNTypeId::BitString),
-                0x04 => Some(ASNTypeId::OctetString),
-                0x05 => Some(ASNTypeId::Null),
-                0x06 => Some(ASNTypeId::ObjectIdentifier),
-                0x0C => Some(ASNTypeId::UTF8String),
-                0x13 => Some(ASNTypeId::PrintableString),
-                0x16 => Some(ASNTypeId::IA5String),
-                0x17 => Some(ASNTypeId::UTCTime),
+                0x01 => Some((ASNTypeId::Boolean, *tag)),
+                0x02 => Some((ASNTypeId::Integer, *tag)),
+                0x03 => Some((ASNTypeId::BitString, *tag)),
+                0x04 => Some((ASNTypeId::OctetString, *tag)),
+                0x05 => Some((ASNTypeId::Null, *tag)),
+                0x06 => Some((ASNTypeId::ObjectIdentifier, *tag)),
+                0x0C => Some((ASNTypeId::UTF8String, *tag)),
+                0x13 => Some((ASNTypeId::PrintableString, *tag)),
+                0x16 => Some((ASNTypeId::IA5String, *tag)),
+                0x17 => Some((ASNTypeId::UTCTime, *tag)),
 
                 _ => None
             }
@@ -233,18 +202,44 @@ fn read_type(id: &Identifier) -> Option<ASNTypeId> {
         Identifier{ class: TagClass::Universal, pc: PC::Constructed, tag} => {
             match tag {
 
-                0x10 => Some(ASNTypeId::Sequence),
-                0x11 => Some(ASNTypeId::Set),
+                0x10 => Some((ASNTypeId::Sequence, *tag)),
+                0x11 => Some((ASNTypeId::Set, *tag)),
 
                 _ => None
             }
         },
 
-        Identifier{ class: TagClass::ContextSpecific, pc: PC::Constructed, tag: _} => {
-            Some(ASNTypeId::ExplicitTag)
+        Identifier{ class: TagClass::ContextSpecific, pc: _, tag} => {
+            Some((ASNTypeId::ExplicitTag, *tag))
         },
 
         _ => None
+    }
+}
+
+fn get_contents<'a>(reader: &mut Reader<'a>) -> Result<&'a[u8], ASNError> {
+    let length = parse_length(reader)?;
+    Ok(reader.take(length)?)
+}
+
+fn parse_content<'a>(type_id: &ASNTypeId, tag: u8, contents: &'a [u8]) -> ASNResult<'a> {
+
+    match type_id {
+        ASNTypeId::Boolean => parse_boolean(contents),
+        ASNTypeId::Integer => parse_integer(contents),
+        ASNTypeId::BitString => parse_bit_string(contents),
+        ASNTypeId::OctetString => Ok(OctetString::new(contents)),
+        ASNTypeId::Null => parse_null(contents),
+        ASNTypeId::ObjectIdentifier => parse_object_identifier(contents),
+        ASNTypeId::UTF8String => parse_string(contents, |s| UTF8String::new(s)),
+        ASNTypeId::PrintableString => parse_string(contents, |s| PrintableString::new(s)),
+        ASNTypeId::IA5String => parse_string(contents, |s| IA5String::new(s)),
+        ASNTypeId::UTCTime => parse_utc_time(contents),
+
+        ASNTypeId::Sequence => parse_seq(contents),
+        ASNTypeId::Set => parse_set(contents),
+
+        ASNTypeId::ExplicitTag => Ok(ExplicitTag::new(ASNExplicitTag::new(tag, contents)))
     }
 }
 
@@ -304,7 +299,7 @@ impl<'a> Parser<'a> {
         let id = Identifier::from(self.reader.peek_or_fail()?);
 
         match read_type(&id) {
-            Some(ASNTypeId::ExplicitTag) if id.tag == tag => Ok(Some(self.expect::<ExplicitTag>()?)),
+            Some((ASNTypeId::ExplicitTag, actual_tag)) if tag == actual_tag => Ok(Some(self.expect::<ExplicitTag>()?)),
             Some(_) => Ok(None),
             None => Err(UnsupportedId(id)),
         }
@@ -325,10 +320,19 @@ impl<'a> Parser<'a> {
         let id = Identifier::from(self.reader.peek_or_fail()?);
 
         match read_type(&id) {
-            Some(ref id) if *id == T::get_id() => Ok(Some(self.expect::<T>()?)),
+            Some((ref id, _)) if *id == T::get_id() => Ok(Some(self.expect::<T>()?)),
             Some(_) => Ok(None),
             None => Err(UnsupportedId(id)),
         }
+    }
+
+    pub fn parse_implicit<T : ASNWrapperType<'a>>(&mut self) -> Result<T::Item, ASNError> {
+        let result = match T::get_value(parse_content(&T::get_id(), 0, self.reader.remainder())?) {
+            Some(value) => Ok(value),
+            None => panic!("Wrapper should have returned a {:?}!", T::get_id())
+        };
+        self.reader.clear();
+        result
     }
 
     pub fn expect<T : ASNWrapperType<'a>>(&mut self) -> Result<T::Item, ASNError> {
