@@ -247,7 +247,7 @@ pub struct Parser<'a> {
     reader: Reader<'a>
 }
 
-pub fn parse_all<'a, T>(input: &'a[u8], parse: fn(&mut Parser)-> Result<T, ASNError>) -> Result<T,ASNError> {
+pub fn parse_all<'a, T: 'a>(input: &'a[u8], parse: fn(&mut Parser<'a>)-> Result<T, ASNError>) -> Result<T,ASNError> {
     let mut parser = Parser::new(input);
     let value = parse(&mut parser)?;
     parser.expect_end()?;

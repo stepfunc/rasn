@@ -164,13 +164,10 @@ impl<'a> AttributeTypeAndValue<'a> {
     }
 
     fn parse(input: &'a [u8]) -> Result<AttributeTypeAndValue<'a>, ASNError> {
-        let mut parser = Parser::new(input);
+        parse_all(input, |parser| {
 
-        let value = AttributeTypeAndValue::new( parser.expect::<ObjectIdentifier>()?,  parser.expect_any()?);
-
-        parser.expect_end()?;
-
-        Ok(value)
+            Ok(AttributeTypeAndValue::new( parser.expect::<ObjectIdentifier>()?,  parser.expect_any()?))
+        })
     }
 }
 
