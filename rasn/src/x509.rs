@@ -1,5 +1,5 @@
 use types::{ASNBitString, ASNError, ASNInteger, ASNType, ASNObjectIdentifier, UtcTime, ObjectIdentifier, Sequence, Set, BitString, Integer};
-use parser::{Parser, parse_all};
+use parser::Parser;
 use printer::{Printable, LinePrinter, print_type};
 use extensions::{Extension};
 
@@ -133,7 +133,7 @@ impl Validity {
 
     fn parse(input: &[u8]) -> Result<Validity, ASNError> {
 
-        parse_all(input, |parser| {
+        Parser::parse_all(input, |parser| {
             Ok(Validity::new( parser.expect::<UtcTime>()?,  parser.expect::<UtcTime>()?))
         })
 
@@ -164,8 +164,7 @@ impl<'a> AttributeTypeAndValue<'a> {
     }
 
     fn parse(input: &'a [u8]) -> Result<AttributeTypeAndValue<'a>, ASNError> {
-        parse_all(input, |parser| {
-
+        Parser::parse_all(input, |parser| {
             Ok(AttributeTypeAndValue::new( parser.expect::<ObjectIdentifier>()?,  parser.expect_any()?))
         })
     }
@@ -257,16 +256,13 @@ impl<'a> SubjectPublicKeyInfo<'a> {
     }
 
     fn parse(input: &[u8]) -> Result<SubjectPublicKeyInfo, ASNError> {
-        let mut parser = Parser::new(input);
 
-        let value = SubjectPublicKeyInfo::new(
-            AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
-            parser.expect::<BitString>()?
-        );
-
-        parser.expect_end()?;
-
-        Ok(value)
+        Parser::parse_all(input, |parser| {
+            Ok(SubjectPublicKeyInfo::new(
+                AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
+                parser.expect::<BitString>()?
+            ))
+        })
     }
 }
 
@@ -280,17 +276,16 @@ impl<'a> Printable for SubjectPublicKeyInfo<'a> {
 impl<'a> Certificate<'a> {
 
     pub fn parse(input: &[u8]) -> Result<Certificate, ASNError> {
-        let mut parser = Parser::unwrap_outer_sequence(input)?;
 
-        let value = Certificate::new(
-            TBSCertificate::parse(parser.expect::<Sequence>()?)?,
-            AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
-            parser.expect::<BitString>()?
-        );
-
-        parser.expect_end()?;
-
-        Ok(value)
+        Parser::parse_all(input, |parser| {
+            Ok(
+                Certificate::new(
+                TBSCertificate::parse(parser.expect::<Sequence>()?)?,
+                AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
+                parser.expect::<BitString>()?
+                )
+            )
+        })
     }
 
     pub fn new(tbs_certificate : Constructed<'a, TBSCertificate<'a>>,
@@ -352,10 +347,7 @@ impl<'a> TBSCertificate<'a> {
             // TODO: check minimum version
             match parser.get_optional_explicit_tag(tag)? {
                 Some(tag) => {
-                    let mut parser = Parser::new(tag.contents);
-                    let value = parser.expect::<BitString>()?;
-                    parser.expect_end()?;
-                    Ok(Some(value))
+                    Parser::parse_all(tag.contents, |parser| { Ok(Some(parser.expect::<BitString>()?))})
                 }
                 None => Ok(None)
             }
@@ -376,28 +368,24 @@ impl<'a> TBSCertificate<'a> {
             Ok(extensions)
         }
 
-        let mut parser = Parser::new(input);
-
-        let value = Constructed::new(
-            input,
-            TBSCertificate::new(
-                parse_version(&mut parser)?,
-                parser.expect::<Integer>()?,
-                AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
-                Name::parse(parser.expect::<Sequence>()?)?,
-                Validity::parse(parser.expect::<Sequence>()?)?,
-                Name::parse(parser.expect::<Sequence>()?)?,
-                SubjectPublicKeyInfo::parse(parser.expect::<Sequence>()?)?,
-                parse_optional_bitstring(&mut parser, 1)?,
-                parse_optional_bitstring(&mut parser, 2)?,
-                parse_extensions(&mut parser)?,
+        fn parse_tbs_cert<'a>(parser: &mut Parser<'a>) -> Result<TBSCertificate<'a>, ASNError> {
+            Ok(
+                    TBSCertificate::new(
+                        parse_version(parser)?,
+                        parser.expect::<Integer>()?,
+                        AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
+                        Name::parse(parser.expect::<Sequence>()?)?,
+                        Validity::parse(parser.expect::<Sequence>()?)?,
+                        Name::parse(parser.expect::<Sequence>()?)?,
+                        SubjectPublicKeyInfo::parse(parser.expect::<Sequence>()?)?,
+                        parse_optional_bitstring(parser, 1)?,
+                        parse_optional_bitstring(parser, 2)?,
+                        parse_extensions(parser)?,
+                    )
             )
-        );
+        }
 
-        parser.expect_end()?;
-
-
-        Ok(value)
+        Ok(Constructed::new(input, Parser::parse_all(input, parse_tbs_cert)?))
     }
 }
 

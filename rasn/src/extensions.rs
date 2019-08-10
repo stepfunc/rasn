@@ -16,23 +16,24 @@ impl<'a> Extension<'a> {
     }
 
     pub fn parse(input: &'a [u8]) -> Result<Extension, ASNError> {
-        let mut parser = Parser::new(input);
 
-        let oid = parser.expect::<ObjectIdentifier>()?;
-        let is_critical = parser.get_optional_or_default::<Boolean>(false)?;
-        let raw_content = parser.expect::<OctetString>()?;
-        parser.expect_end()?;
+        Parser::parse_all(input, |parser| {
+            let oid = parser.expect::<ObjectIdentifier>()?;
+            let is_critical = parser.get_optional_or_default::<Boolean>(false)?;
+            let raw_content = parser.expect::<OctetString>()?;
 
-        let content: Box<dyn SpecificExtension> = match oid.values() {
-            [2, 5, 29, 14] => Box::new(SubjectKeyIdentifier::parse(raw_content)?),
-            [2, 5, 29, 15] => Box::new(KeyUsage::parse(raw_content)?),
-            [2, 5, 29, 17] => Box::new(SubjectAlternativeName::parse(raw_content)?),
-            [2, 5, 29, 19] => Box::new(BasicConstraints::parse(raw_content)?),
-            [2, 5, 29, 37] => Box::new(ExtendedKeyUsage::parse(raw_content)?),
-            _ => Box::new(UnknownExtension::new(raw_content)),
-        };
+            let content: Box<dyn SpecificExtension> = match oid.values() {
+                [2, 5, 29, 14] => Box::new(SubjectKeyIdentifier::parse(raw_content)?),
+                [2, 5, 29, 15] => Box::new(KeyUsage::parse(raw_content)?),
+                [2, 5, 29, 17] => Box::new(SubjectAlternativeName::parse(raw_content)?),
+                [2, 5, 29, 19] => Box::new(BasicConstraints::parse(raw_content)?),
+                [2, 5, 29, 37] => Box::new(ExtendedKeyUsage::parse(raw_content)?),
+                _ => Box::new(UnknownExtension::new(raw_content)),
+            };
 
-        Ok(Extension::new(oid, is_critical, content))
+            Ok(Extension::new(oid, is_critical, content))
+        })
+
     }
 }
 

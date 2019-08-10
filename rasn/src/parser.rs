@@ -247,14 +247,16 @@ pub struct Parser<'a> {
     reader: Reader<'a>
 }
 
-pub fn parse_all<'a, T: 'a>(input: &'a[u8], parse: fn(&mut Parser<'a>)-> Result<T, ASNError>) -> Result<T,ASNError> {
-    let mut parser = Parser::new(input);
-    let value = parse(&mut parser)?;
-    parser.expect_end()?;
-    Ok(value)
-}
+
 
 impl<'a> Parser<'a> {
+
+    pub fn parse_all<'b, T: 'b>(input: &'b[u8], parse: fn(&mut Parser<'b>)-> Result<T, ASNError>) -> Result<T,ASNError> {
+        let mut parser = Parser::new(input);
+        let value = parse(&mut parser)?;
+        parser.expect_end()?;
+        Ok(value)
+    }
 
     pub fn new(input: &'a[u8]) -> Parser {
         Parser { reader: Reader::new(input) }
@@ -372,7 +374,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn expect_end(&mut self) -> Result<(), ASNError> {
+    fn expect_end(&mut self) -> Result<(), ASNError> {
         match self.next() {
             None => Ok(()),
             Some(Err(err)) => Err(err),
