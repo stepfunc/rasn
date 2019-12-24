@@ -134,37 +134,36 @@ fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
     let count_of_bytes = (first_byte & 0b0111_1111) as usize;
 
     if top_bit == 0 {
-        Ok(count_of_bytes)
-    } else {
-        if count_of_bytes == 0 {
-            return Err(ASNError::UnsupportedIndefiniteLength);
-        }
-
-        if count_of_bytes == 127 {
-            return Err(ASNError::ReservedLengthValue);
-        }
-
-        if count_of_bytes < 1 || count_of_bytes > 4 {
-            return Err(ASNError::UnsupportedLengthByteCount(count_of_bytes));
-        }
-
-        let mut value: usize = 0;
-
-        for _ in 0..count_of_bytes {
-            value <<= 8;
-            value |= reader.read_byte()? as usize;
-        }
-
-        if value == 0 {
-            return Err(ASNError::UnsupportedIndefiniteLength);
-        }
-
-        if value < 128 {
-            return Err(ASNError::BadLengthEncoding(value)); // should have been encoded in single byte
-        }
-
-        Ok(value)
+        return Ok(count_of_bytes);
     }
+
+    // DER only allows a single encoding for any particular
+    // value. For a given count of bytes, the encoded
+    // length must fit into the minimum length representation
+    let min_value_for_count : u64 = match count_of_bytes {
+        0 => return Err(ASNError::UnsupportedIndefiniteLength),
+        127 => return Err(ASNError::ReservedLengthValue),
+        // anything < these numbers indicate the value should have been encoded
+        // with 1 less byte
+        1 => 128,
+        2 => 256,
+        3 => 65536,
+        4 => 16777216,
+        _ => return Err(ASNError::UnsupportedLengthByteCount(count_of_bytes)),
+    };
+
+    let mut value: usize = 0;
+
+    for _ in 0..count_of_bytes {
+        value <<= 8;
+        value |= reader.read_byte()? as usize;
+    }
+
+    if (value as u64) < min_value_for_count {
+        return Err(ASNError::BadLengthEncoding(value));
+    }
+
+    Ok(value)
 }
 
 fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
@@ -464,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn decode_length_on_count_of_one_returns_none_if_value_less_than_128() {
+    fn detects_two_byte_bad_length_encoding() {
         let mut reader = Reader::new(&[TOP_BIT | 1, 127]);
         assert_eq!(
             parse_length(&mut reader),
