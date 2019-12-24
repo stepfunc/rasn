@@ -595,8 +595,8 @@ pub enum ASNError {
     UnsupportedId(Identifier),
     UnsupportedIndefiniteLength,
     ReservedLengthValue,
-    UnsupportedLengthByteCount(usize),
-    BadLengthEncoding(usize),
+    UnsupportedLengthByteCount(u8),
+    BadLengthEncoding(u8, usize), // count of bytes followed by the value
     BadOidLength,
     BadUTF8(std::str::Utf8Error),
     BadUTCTime(chrono::format::ParseError),
@@ -639,8 +639,8 @@ impl std::fmt::Display for ASNError {
             ASNError::UnsupportedLengthByteCount(length) => {
                 write!(f, "Length byte count of {} not supported", length)
             }
-            ASNError::BadLengthEncoding(value) => {
-                write!(f, "Length should be encoded as a single byte: {}", value)
+            ASNError::BadLengthEncoding(count, value) => {
+                write!(f, "Value {} encoded using {} bytes", value, count)
             }
             ASNError::BadOidLength => f.write_str("Bad OID length"),
             ASNError::BadUTF8(err) => write!(f, "Bad UTF8 encoding: {}", err),

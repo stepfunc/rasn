@@ -331,7 +331,6 @@ impl<'a> AlgorithmIdentifier<'a> {
 }
 
 impl<'a> TBSCertificate<'a> {
-
     // certificate really has this many fields, don't warn on lint
     #[allow(clippy::too_many_arguments)]
     pub fn new(

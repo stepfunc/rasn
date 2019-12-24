@@ -131,20 +131,19 @@ fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
     let first_byte = reader.read_byte()?;
 
     let top_bit = first_byte & 0b1000_0000;
-    let count_of_bytes = (first_byte & 0b0111_1111) as usize;
+    let count_of_bytes = first_byte & 0b0111_1111;
 
     if top_bit == 0 {
-        return Ok(count_of_bytes);
+        return Ok(count_of_bytes as usize);
     }
 
     // DER only allows a single encoding for any particular
     // value. For a given count of bytes, the encoded
     // length must fit into the minimum length representation
-    let min_value_for_count : u64 = match count_of_bytes {
+    let min_value_for_count: u64 = match count_of_bytes {
         0 => return Err(ASNError::UnsupportedIndefiniteLength),
         127 => return Err(ASNError::ReservedLengthValue),
-        // anything < these numbers indicate the value should have been encoded
-        // with 1 less byte
+        // anything < these numbers indicate the value should have been encoded with fewer bytes
         1 => 128,
         2 => 256,
         3 => 65536,
@@ -160,7 +159,7 @@ fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
     }
 
     if (value as u64) < min_value_for_count {
-        return Err(ASNError::BadLengthEncoding(value));
+        return Err(ASNError::BadLengthEncoding(count_of_bytes, value));
     }
 
     Ok(value)
@@ -431,6 +430,11 @@ mod tests {
 
     const TOP_BIT: u8 = 1 << 7;
 
+    fn test_parse_length(bytes: &[u8]) -> Result<usize, ASNError> {
+        let mut reader = Reader::new(bytes);
+        parse_length(&mut reader)
+    }
+
     #[test]
     fn decode_length_on_empty_bytes_fails() {
         let mut reader = Reader::new(&[]);
@@ -463,12 +467,45 @@ mod tests {
     }
 
     #[test]
-    fn detects_two_byte_bad_length_encoding() {
-        let mut reader = Reader::new(&[TOP_BIT | 1, 127]);
+    fn detects_one_byte_bad_length_encoding() {
+        assert_eq!(test_parse_length(&[TOP_BIT | 1, 128]), Ok(128));
         assert_eq!(
-            parse_length(&mut reader),
-            Err(ASNError::BadLengthEncoding(127))
-        )
+            test_parse_length(&[TOP_BIT | 1, 127]),
+            Err(ASNError::BadLengthEncoding(1, 127))
+        );
+    }
+
+    #[test]
+    fn detects_two_byte_bad_length_encoding() {
+        assert_eq!(test_parse_length(&[TOP_BIT | 2, 0x01, 0x00]), Ok(256));
+        assert_eq!(
+            test_parse_length(&[TOP_BIT | 2, 0x00, 0xFF]),
+            Err(ASNError::BadLengthEncoding(2, 255))
+        );
+    }
+
+    #[test]
+    fn detects_three_byte_bad_length_encoding() {
+        assert_eq!(
+            test_parse_length(&[TOP_BIT | 3, 0x01, 0x00, 0x00]),
+            Ok(65536)
+        );
+        assert_eq!(
+            test_parse_length(&[TOP_BIT | 3, 0x00, 0xFF, 0xFF]),
+            Err(ASNError::BadLengthEncoding(3, 65535))
+        );
+    }
+
+    #[test]
+    fn detects_four_byte_bad_length_encoding() {
+        assert_eq!(
+            test_parse_length(&[TOP_BIT | 4, 0x01, 0x00, 0x00, 0x00]),
+            Ok(16777216)
+        );
+        assert_eq!(
+            test_parse_length(&[TOP_BIT | 4, 0x00, 0xFF, 0xFF, 0xFF]),
+            Err(ASNError::BadLengthEncoding(4, 16777215))
+        );
     }
 
     #[test]
