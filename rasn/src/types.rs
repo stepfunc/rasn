@@ -37,20 +37,20 @@ impl Identifier {
     }
 
     pub fn from(byte: u8) -> Identifier {
-        let class = match byte & 0b11000000 {
-            0b00000000 => TagClass::Universal,
-            0b01000000 => TagClass::Application,
-            0b10000000 => TagClass::ContextSpecific,
+        let class = match byte & 0b1100_0000 {
+            0b0000_0000 => TagClass::Universal,
+            0b0100_0000 => TagClass::Application,
+            0b1000_0000 => TagClass::ContextSpecific,
             _ => TagClass::Private,
         };
 
-        let pc = if (byte & 0b00100000) != 0 {
+        let pc = if (byte & 0b0010_0000) != 0 {
             PC::Constructed
         } else {
             PC::Primitive
         };
 
-        let tag = byte & 0b00011111;
+        let tag = byte & 0b000_11111;
 
         Identifier::new(class, pc, tag)
     }
@@ -216,7 +216,7 @@ pub struct Boolean {
     pub value: bool,
 }
 impl Boolean {
-    pub fn new<'a>(value: bool) -> ASNType<'a> {
+    pub fn asn<'a>(value: bool) -> ASNType<'a> {
         ASNType::Boolean(Boolean { value })
     }
 }
@@ -240,7 +240,7 @@ pub struct Integer<'a> {
     pub value: ASNInteger<'a>,
 }
 impl<'a> Integer<'a> {
-    pub fn new(value: ASNInteger<'a>) -> ASNType<'a> {
+    pub fn asn(value: ASNInteger<'a>) -> ASNType<'a> {
         ASNType::Integer(Integer { value })
     }
 }
@@ -264,7 +264,7 @@ pub struct PrintableString<'a> {
     pub value: &'a str,
 }
 impl<'a> PrintableString<'a> {
-    pub fn new(value: &'a str) -> ASNType<'a> {
+    pub fn asn(value: &'a str) -> ASNType<'a> {
         ASNType::PrintableString(PrintableString { value })
     }
 }
@@ -288,7 +288,7 @@ pub struct IA5String<'a> {
     pub value: &'a str,
 }
 impl<'a> IA5String<'a> {
-    pub fn new(value: &'a str) -> ASNType<'a> {
+    pub fn asn(value: &'a str) -> ASNType<'a> {
         ASNType::IA5String(IA5String { value })
     }
 }
@@ -312,7 +312,7 @@ pub struct UTF8String<'a> {
     pub value: &'a str,
 }
 impl<'a> UTF8String<'a> {
-    pub fn new(value: &'a str) -> ASNType<'a> {
+    pub fn asn(value: &'a str) -> ASNType<'a> {
         ASNType::UTF8String(UTF8String { value })
     }
 }
@@ -336,7 +336,7 @@ pub struct Sequence<'a> {
     pub value: &'a [u8],
 }
 impl<'a> Sequence<'a> {
-    pub fn new(value: &'a [u8]) -> ASNType<'a> {
+    pub fn asn(value: &'a [u8]) -> ASNType<'a> {
         ASNType::Sequence(Sequence { value })
     }
 }
@@ -360,7 +360,7 @@ pub struct Set<'a> {
     pub value: &'a [u8],
 }
 impl<'a> Set<'a> {
-    pub fn new(value: &'a [u8]) -> ASNType<'a> {
+    pub fn asn(value: &'a [u8]) -> ASNType<'a> {
         ASNType::Set(Set { value })
     }
 }
@@ -384,7 +384,7 @@ pub struct ObjectIdentifier {
     pub value: ASNObjectIdentifier,
 }
 impl ObjectIdentifier {
-    pub fn new<'a>(value: ASNObjectIdentifier) -> ASNType<'a> {
+    pub fn asn<'a>(value: ASNObjectIdentifier) -> ASNType<'a> {
         ASNType::ObjectIdentifier(ObjectIdentifier { value })
     }
 }
@@ -408,7 +408,7 @@ pub struct OctetString<'a> {
     pub value: &'a [u8],
 }
 impl<'a> OctetString<'a> {
-    pub fn new(value: &'a [u8]) -> ASNType<'a> {
+    pub fn asn(value: &'a [u8]) -> ASNType<'a> {
         ASNType::OctetString(OctetString { value })
     }
 }
@@ -432,7 +432,7 @@ pub struct BitString<'a> {
     pub value: ASNBitString<'a>,
 }
 impl<'a> BitString<'a> {
-    pub fn new(value: ASNBitString<'a>) -> ASNType<'a> {
+    pub fn asn(value: ASNBitString<'a>) -> ASNType<'a> {
         ASNType::BitString(BitString { value })
     }
 }
@@ -456,7 +456,7 @@ pub struct UtcTime {
     pub value: DateTime<FixedOffset>,
 }
 impl UtcTime {
-    pub fn new<'a>(value: DateTime<FixedOffset>) -> ASNType<'a> {
+    pub fn asn<'a>(value: DateTime<FixedOffset>) -> ASNType<'a> {
         ASNType::UTCTime(UtcTime { value })
     }
 }
@@ -480,7 +480,7 @@ pub struct ExplicitTag<'a> {
     pub value: ASNExplicitTag<'a>,
 }
 impl<'a> ExplicitTag<'a> {
-    pub fn new(value: ASNExplicitTag<'a>) -> ASNType<'a> {
+    pub fn asn(value: ASNExplicitTag<'a>) -> ASNType<'a> {
         ASNType::ExplicitTag(ExplicitTag { value })
     }
 }

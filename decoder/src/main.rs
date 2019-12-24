@@ -11,7 +11,7 @@ use rasn::parse_all::parse_all;
 use rasn::printer::{ConsoleLinePrinter, Printable};
 use rasn::x509::Certificate;
 
-fn get_bytes(file: &String) -> Result<Vec<u8>, std::io::Error> {
+fn get_bytes(file: &str) -> Result<Vec<u8>, std::io::Error> {
     let mut f = File::open(file)?;
     let mut vec: Vec<u8> = Vec::new();
     f.read_to_end(&mut vec)?;

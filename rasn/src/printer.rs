@@ -39,6 +39,12 @@ impl ConsoleLinePrinter {
     }
 }
 
+impl Default for ConsoleLinePrinter {
+    fn default() -> Self {
+        ConsoleLinePrinter::new()
+    }
+}
+
 impl LinePrinter for ConsoleLinePrinter {
     fn begin_type(&mut self) {
         self.indent += 1;

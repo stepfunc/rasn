@@ -334,12 +334,9 @@ impl Printable for BasicConstraints {
     fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
         printer.println_fmt(&format_args!("CA: {}", self.ca));
-        match self.path_length_constraint {
-            Some(constraint) => {
-                printer.begin_line();
-                printer.println_fmt(&format_args!("Path Length Contraint: {}", constraint));
-            }
-            None => {}
+        if let Some(constraint) = self.path_length_constraint {
+            printer.begin_line();
+            printer.println_fmt(&format_args!("Path Length Contraint: {}", constraint));
         }
     }
 }

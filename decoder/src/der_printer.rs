@@ -29,27 +29,20 @@ impl ParseHandler for ParsePrinter {
     fn on_type(&mut self, asn: &ASNType) {
         self.print_indent();
         println!("{}", asn);
-        match asn {
-            ASNType::BitString(wrapper) => match wrapper.value.octets() {
-                Some(octets) => {
-                    self.indent += 1;
-                    for chunk in octets.chunks(16) {
-                        self.print_indent();
-                        match chunk.split_last() {
-                            Some((last, first)) => {
-                                for byte in first {
-                                    print!("{:02X}:", byte)
-                                }
-                                println!("{:02X}", last)
-                            }
-                            None => {}
+        if let ASNType::BitString(wrapper) = asn {
+            if let Some(octets) = wrapper.value.octets() {
+                self.indent += 1;
+                for chunk in octets.chunks(16) {
+                    self.print_indent();
+                    if let Some((last, first)) = chunk.split_last() {
+                        for byte in first {
+                            print!("{:02X}:", byte)
                         }
+                        println!("{:02X}", last)
                     }
-                    self.indent -= 1;
                 }
-                None => (),
-            },
-            _ => (),
+                self.indent -= 1;
+            }
         }
     }
 

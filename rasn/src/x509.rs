@@ -387,14 +387,11 @@ impl<'a> TBSCertificate<'a> {
         fn parse_extensions<'a>(parser: &mut Parser<'a>) -> Result<Vec<Extension<'a>>, ASNError> {
             // TODO: check minimum version
             let mut extensions: Vec<Extension> = Vec::new();
-            match parser.get_optional_explicit_tag(3)? {
-                Some(tag) => {
-                    let mut parser = Parser::unwrap_outer_sequence(tag.contents)?;
-                    while let Some(seq) = parser.expect_or_end::<Sequence>()? {
-                        extensions.push(Extension::parse(seq)?);
-                    }
+            if let Some(tag) = parser.get_optional_explicit_tag(3)? {
+                let mut parser = Parser::unwrap_outer_sequence(tag.contents)?;
+                while let Some(seq) = parser.expect_or_end::<Sequence>()? {
+                    extensions.push(Extension::parse(seq)?);
                 }
-                None => {}
             };
             Ok(extensions)
         }

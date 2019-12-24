@@ -42,8 +42,8 @@ impl KnownOID {
 
 pub fn get_oid(id: &[u32]) -> Option<KnownOID> {
     match id {
-        [1, 2, 840, 113549, 1, 1, 1] => Some(KnownOID::Algorithm(AlgorithmID::RSAEncryption)),
-        [1, 2, 840, 113549, 1, 1, 5] => {
+        [1, 2, 840, 113_549, 1, 1, 1] => Some(KnownOID::Algorithm(AlgorithmID::RSAEncryption)),
+        [1, 2, 840, 113_549, 1, 1, 5] => {
             Some(KnownOID::Algorithm(AlgorithmID::SHA1WithRSASignature))
         }
         [1, 3, 101, 112] => Some(KnownOID::Algorithm(AlgorithmID::Ed25519)),
@@ -53,7 +53,7 @@ pub fn get_oid(id: &[u32]) -> Option<KnownOID> {
         [2, 5, 4, 10] => Some(KnownOID::OrganizationName),
         [2, 5, 4, 11] => Some(KnownOID::OrganizationalUnitName),
         [2, 5, 4, 8] => Some(KnownOID::StateOrProvinceName),
-        [1, 2, 840, 113549, 1, 9, 1] => Some(KnownOID::EmailAddress),
+        [1, 2, 840, 113_549, 1, 9, 1] => Some(KnownOID::EmailAddress),
 
         _ => None,
     }

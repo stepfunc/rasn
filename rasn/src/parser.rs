@@ -8,11 +8,11 @@ use types::*;
 type ASNResult<'a> = Result<ASNType<'a>, ASNError>;
 
 fn parse_seq(contents: &[u8]) -> ASNResult {
-    Ok(Sequence::new(contents))
+    Ok(Sequence::asn(contents))
 }
 
 fn parse_set(contents: &[u8]) -> ASNResult {
-    Ok(Set::new(contents))
+    Ok(Set::asn(contents))
 }
 
 fn parse_null(contents: &[u8]) -> ASNResult {
@@ -25,8 +25,8 @@ fn parse_null(contents: &[u8]) -> ASNResult {
 
 fn parse_boolean(contents: &[u8]) -> ASNResult {
     match contents {
-        [0xFF] => Ok(Boolean::new(true)),
-        [0x00] => Ok(Boolean::new(false)),
+        [0xFF] => Ok(Boolean::asn(true)),
+        [0x00] => Ok(Boolean::asn(false)),
         [x] => Err(ASNError::BadBooleanValue(*x)),
         _ => Err(ASNError::BadBooleanLength(contents.len())),
     }
@@ -36,7 +36,7 @@ fn parse_integer(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Err(ASNError::ZeroLengthInteger)
     } else {
-        Ok(Integer::new(ASNInteger::new(contents)))
+        Ok(Integer::asn(ASNInteger::new(contents)))
     }
 }
 
@@ -58,7 +58,7 @@ fn parse_utc_time(contents: &[u8]) -> ASNResult {
     }
 
     match try_parse_all_variants(str::from_utf8(contents)?) {
-        Ok(time) => Ok(UtcTime::new(time)),
+        Ok(time) => Ok(UtcTime::asn(time)),
         Err(err) => Err(ASNError::BadUTCTime(err)),
     }
 }
@@ -80,14 +80,14 @@ fn parse_bit_string(contents: &[u8]) -> ASNResult {
         return Err(ASNError::BitStringUnusedBitsTooLarge(unused_bits));
     }
 
-    Ok(BitString::new(ASNBitString::new(
+    Ok(BitString::asn(ASNBitString::new(
         unused_bits,
         &contents[1..],
     )))
 }
 
 fn parse_object_identifier(contents: &[u8]) -> ASNResult {
-    fn parse_one<'a>(reader: &mut Reader) -> Result<u32, ASNError> {
+    fn parse_one(reader: &mut Reader) -> Result<u32, ASNError> {
         let mut sum: u32 = 0;
         let mut count: u32 = 0;
         loop {
@@ -97,8 +97,8 @@ fn parse_object_identifier(contents: &[u8]) -> ASNResult {
             };
 
             let next_byte = reader.read_byte()?;
-            let has_next: bool = (next_byte & 0b10000000) != 0;
-            let value: u32 = (next_byte & 0b01111111) as u32;
+            let has_next: bool = (next_byte & 0b1000_0000) != 0;
+            let value: u32 = (next_byte & 0b0111_1111) as u32;
 
             sum <<= 7;
             sum += value;
@@ -124,14 +124,14 @@ fn parse_object_identifier(contents: &[u8]) -> ASNResult {
         items.push(parse_one(&mut reader)?);
     }
 
-    Ok(ObjectIdentifier::new(ASNObjectIdentifier::new(items)))
+    Ok(ObjectIdentifier::asn(ASNObjectIdentifier::new(items)))
 }
 
 fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
     let first_byte = reader.read_byte()?;
 
-    let top_bit = first_byte & 0b10000000;
-    let count_of_bytes = (first_byte & 0b01111111) as usize;
+    let top_bit = first_byte & 0b1000_0000;
+    let count_of_bytes = (first_byte & 0b0111_1111) as usize;
 
     if top_bit == 0 {
         Ok(count_of_bytes)
@@ -212,8 +212,8 @@ fn read_type(id: &Identifier) -> Option<(ASNTypeId, u8)> {
 
         Identifier {
             class: TagClass::ContextSpecific,
-            pc: _,
             tag,
+            ..
         } => Some((ASNTypeId::ExplicitTag, *tag)),
 
         _ => None,
@@ -230,18 +230,18 @@ fn parse_content<'a>(type_id: &ASNTypeId, tag: u8, contents: &'a [u8]) -> ASNRes
         ASNTypeId::Boolean => parse_boolean(contents),
         ASNTypeId::Integer => parse_integer(contents),
         ASNTypeId::BitString => parse_bit_string(contents),
-        ASNTypeId::OctetString => Ok(OctetString::new(contents)),
+        ASNTypeId::OctetString => Ok(OctetString::asn(contents)),
         ASNTypeId::Null => parse_null(contents),
         ASNTypeId::ObjectIdentifier => parse_object_identifier(contents),
-        ASNTypeId::UTF8String => parse_string(contents, |s| UTF8String::new(s)),
-        ASNTypeId::PrintableString => parse_string(contents, |s| PrintableString::new(s)),
-        ASNTypeId::IA5String => parse_string(contents, |s| IA5String::new(s)),
+        ASNTypeId::UTF8String => parse_string(contents, |s| UTF8String::asn(s)),
+        ASNTypeId::PrintableString => parse_string(contents, |s| PrintableString::asn(s)),
+        ASNTypeId::IA5String => parse_string(contents, |s| IA5String::asn(s)),
         ASNTypeId::UTCTime => parse_utc_time(contents),
 
         ASNTypeId::Sequence => parse_seq(contents),
         ASNTypeId::Set => parse_set(contents),
 
-        ASNTypeId::ExplicitTag => Ok(ExplicitTag::new(ASNExplicitTag::new(tag, contents))),
+        ASNTypeId::ExplicitTag => Ok(ExplicitTag::asn(ASNExplicitTag::new(tag, contents))),
     }
 }
 
@@ -540,7 +540,7 @@ mod tests {
         let mut reader = Reader::new(&[0x30, 0x03, 0x02, 0x03, 0x04, 0x05, 0x06]);
         assert_eq!(
             parse_one_type(&mut reader),
-            Ok(Sequence::new(&[0x02, 0x03, 0x04]))
+            Ok(Sequence::asn(&[0x02, 0x03, 0x04]))
         );
         assert_eq!(reader.remainder(), &[0x05, 0x06]);
     }
@@ -556,7 +556,7 @@ mod tests {
         let mut reader = Reader::new(&[0xA1, 0x02, 0xCA, 0xFE]);
         assert_eq!(
             parse_one_type(&mut reader),
-            Ok(ExplicitTag::new(ASNExplicitTag::new(1, &[0xCA, 0xFE])))
+            Ok(ExplicitTag::asn(ASNExplicitTag::new(1, &[0xCA, 0xFE])))
         );
     }
 
@@ -572,7 +572,7 @@ mod tests {
         fn test_variant(value: &str, seconds: u32) {
             assert_eq!(
                 parse_utc_time(value.as_bytes()),
-                Ok(UtcTime::new(chrono::DateTime::from_utc(
+                Ok(UtcTime::asn(chrono::DateTime::from_utc(
                     chrono::NaiveDate::from_ymd(1999, 01, 02).and_hms(5, 23, seconds),
                     chrono::FixedOffset::east(0)
                 )))
@@ -595,7 +595,7 @@ mod tests {
         // Microsoft: szOID_REQUEST_CLIENT_INFO
         assert_eq!(
             parse_object_identifier(&[0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x15, 0x14]),
-            Ok(ObjectIdentifier::new(ASNObjectIdentifier::new(
+            Ok(ObjectIdentifier::asn(ASNObjectIdentifier::new(
                 [1, 3, 6, 1, 4, 1, 311, 21, 20].to_vec()
             )))
         );
@@ -603,7 +603,7 @@ mod tests {
         // sha1WithRSAEncryption
         assert_eq!(
             parse_object_identifier(&[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x05]),
-            Ok(ObjectIdentifier::new(ASNObjectIdentifier::new(
+            Ok(ObjectIdentifier::asn(ASNObjectIdentifier::new(
                 [1, 2, 840, 113549, 1, 1, 5].to_vec()
             )))
         );
