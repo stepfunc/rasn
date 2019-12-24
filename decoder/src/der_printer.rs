@@ -1,8 +1,8 @@
 use rasn::parse_all::ParseHandler;
-use rasn::types::{ASNType, ASNError};
+use rasn::types::{ASNError, ASNType};
 
 pub struct ParsePrinter {
-    indent: usize
+    indent: usize,
 }
 
 impl ParsePrinter {
@@ -30,28 +30,26 @@ impl ParseHandler for ParsePrinter {
         self.print_indent();
         println!("{}", asn);
         match asn {
-            ASNType::BitString(wrapper) => {
-                match wrapper.value.octets() {
-                    Some(octets) => {
-                        self.indent += 1;
-                        for chunk in octets.chunks(16) {
-                            self.print_indent();
-                            match chunk.split_last() {
-                                Some((last, first)) => {
-                                    for byte in first {
-                                        print!("{:02X}:", byte)
-                                    }
-                                    println!("{:02X}", last)
+            ASNType::BitString(wrapper) => match wrapper.value.octets() {
+                Some(octets) => {
+                    self.indent += 1;
+                    for chunk in octets.chunks(16) {
+                        self.print_indent();
+                        match chunk.split_last() {
+                            Some((last, first)) => {
+                                for byte in first {
+                                    print!("{:02X}:", byte)
                                 }
-                                None => {}
+                                println!("{:02X}", last)
                             }
+                            None => {}
                         }
-                        self.indent -= 1;
                     }
-                    None => ()
+                    self.indent -= 1;
                 }
-            }
-            _ => ()
+                None => (),
+            },
+            _ => (),
         }
     }
 

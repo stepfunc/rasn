@@ -1,30 +1,33 @@
-use types::{ASNBitString, ASNError, ASNInteger, ASNType, ASNObjectIdentifier, UtcTime, ObjectIdentifier, Sequence, Set, BitString, Integer};
+use extensions::Extension;
 use parser::Parser;
-use printer::{Printable, LinePrinter, print_type};
-use extensions::{Extension};
+use printer::{print_type, LinePrinter, Printable};
+use types::{
+    ASNBitString, ASNError, ASNInteger, ASNObjectIdentifier, ASNType, BitString, Integer,
+    ObjectIdentifier, Sequence, Set, UtcTime,
+};
 
 #[derive(Debug)]
 pub struct Constructed<'a, T> {
-    pub bytes: &'a[u8],
-    pub value: T
+    pub bytes: &'a [u8],
+    pub value: T,
 }
 
 impl<'a, T> Constructed<'a, T> {
-    pub fn new(bytes: &'a[u8], value: T) -> Constructed<T> {
-        Constructed { bytes, value}
+    pub fn new(bytes: &'a [u8], value: T) -> Constructed<T> {
+        Constructed { bytes, value }
     }
 }
 
 #[derive(Debug)]
 pub struct Certificate<'a> {
     // preserve raw bytes for signature validation using Constructed<T>
-    pub tbs_certificate : Constructed<'a, TBSCertificate<'a>>,
-    pub signature_algorithm : AlgorithmIdentifier<'a>,
-    pub signature_value : ASNBitString<'a>
+    pub tbs_certificate: Constructed<'a, TBSCertificate<'a>>,
+    pub signature_algorithm: AlgorithmIdentifier<'a>,
+    pub signature_value: ASNBitString<'a>,
 }
 
 impl<'a> Printable for Certificate<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         print_type("tbs certificate", &self.tbs_certificate.value, printer);
         print_type("signature algorithm", &self.signature_algorithm, printer);
         print_type("signature value", &self.signature_value, printer);
@@ -32,7 +35,7 @@ impl<'a> Printable for Certificate<'a> {
 }
 
 impl<'a> Printable for &'a [u8] {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         for chunk in self.chunks(16) {
             printer.begin_line();
             if let Some((last, first)) = chunk.split_last() {
@@ -46,7 +49,7 @@ impl<'a> Printable for &'a [u8] {
 }
 
 impl<'a> Printable for ASNBitString<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         if let Some(octets) = self.octets() {
             octets.print(printer);
         }
@@ -55,12 +58,12 @@ impl<'a> Printable for ASNBitString<'a> {
 
 #[derive(Debug)]
 pub struct AlgorithmIdentifier<'a> {
-    pub algorithm : ASNObjectIdentifier,
-    pub parameters : Option<ASNType<'a>>
+    pub algorithm: ASNObjectIdentifier,
+    pub parameters: Option<ASNType<'a>>,
 }
 
 impl<'a> Printable for AlgorithmIdentifier<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         printer.begin_line();
         printer.println_fmt(&format_args!("algorithm: {}", self.algorithm));
     }
@@ -70,26 +73,25 @@ impl<'a> Printable for AlgorithmIdentifier<'a> {
 pub enum Version {
     V1,
     V2,
-    V3
+    V3,
 }
 
 #[derive(Debug)]
 pub struct TBSCertificate<'a> {
-    pub version : Version,
-    pub serial_number : ASNInteger<'a>,
-    pub signature : AlgorithmIdentifier<'a>,
-    pub issuer : Name<'a>,
+    pub version: Version,
+    pub serial_number: ASNInteger<'a>,
+    pub signature: AlgorithmIdentifier<'a>,
+    pub issuer: Name<'a>,
     pub validity: Validity,
-    pub subject : Name<'a>,
-    pub subject_public_key_info : SubjectPublicKeyInfo<'a>,
-    pub issuer_unique_id : Option<ASNBitString<'a>>,
-    pub subject_unique_id : Option<ASNBitString<'a>>,
-    pub extensions : Vec<Extension<'a>>,
+    pub subject: Name<'a>,
+    pub subject_public_key_info: SubjectPublicKeyInfo<'a>,
+    pub issuer_unique_id: Option<ASNBitString<'a>>,
+    pub subject_unique_id: Option<ASNBitString<'a>>,
+    pub extensions: Vec<Extension<'a>>,
 }
 
 impl<'a> Printable for TBSCertificate<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
-
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         printer.begin_line();
         printer.println_fmt(&format_args!("version: {:?}", self.version));
 
@@ -100,9 +102,17 @@ impl<'a> Printable for TBSCertificate<'a> {
         print_type("issuer", &self.issuer, printer);
         print_type("validity", &self.validity, printer);
         print_type("subject", &self.subject, printer);
-        print_type("subject public key info", &self.subject_public_key_info, printer);
-        if let Some(issuer_unique_id) = &self.issuer_unique_id { print_type("issuer unique ID", issuer_unique_id, printer); }
-        if let Some(subject_unique_id) = &self.subject_unique_id { print_type("subject unique ID", subject_unique_id, printer); }
+        print_type(
+            "subject public key info",
+            &self.subject_public_key_info,
+            printer,
+        );
+        if let Some(issuer_unique_id) = &self.issuer_unique_id {
+            print_type("issuer unique ID", issuer_unique_id, printer);
+        }
+        if let Some(subject_unique_id) = &self.subject_unique_id {
+            print_type("subject unique ID", subject_unique_id, printer);
+        }
 
         if !self.extensions.is_empty() {
             printer.begin_line();
@@ -114,7 +124,6 @@ impl<'a> Printable for TBSCertificate<'a> {
             }
             printer.end_type();
         }
-
     }
 }
 
@@ -122,27 +131,30 @@ type Time = chrono::DateTime<chrono::FixedOffset>;
 
 #[derive(Debug)]
 pub struct Validity {
-    pub not_before : Time,
-    pub not_after : Time
+    pub not_before: Time,
+    pub not_after: Time,
 }
 
 impl Validity {
-    fn new(not_before : Time, not_after : Time) -> Validity {
-        Validity { not_before, not_after }
+    fn new(not_before: Time, not_after: Time) -> Validity {
+        Validity {
+            not_before,
+            not_after,
+        }
     }
 
     fn parse(input: &[u8]) -> Result<Validity, ASNError> {
-
         Parser::parse_all(input, |parser| {
-            Ok(Validity::new( parser.expect::<UtcTime>()?,  parser.expect::<UtcTime>()?))
+            Ok(Validity::new(
+                parser.expect::<UtcTime>()?,
+                parser.expect::<UtcTime>()?,
+            ))
         })
-
     }
 }
 
 impl Printable for Validity {
-    fn print(&self, printer: &mut LinePrinter) -> () {
-
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         printer.begin_line();
         printer.println_fmt(&format_args!("not before: {}", self.not_before));
 
@@ -153,25 +165,27 @@ impl Printable for Validity {
 
 #[derive(Debug)]
 pub struct AttributeTypeAndValue<'a> {
-    pub id : ASNObjectIdentifier,
-    pub value : ASNType<'a>
+    pub id: ASNObjectIdentifier,
+    pub value: ASNType<'a>,
 }
 
 impl<'a> AttributeTypeAndValue<'a> {
-
-    fn new(id : ASNObjectIdentifier, value : ASNType<'a>) -> AttributeTypeAndValue<'a> {
-        AttributeTypeAndValue { id, value}
+    fn new(id: ASNObjectIdentifier, value: ASNType<'a>) -> AttributeTypeAndValue<'a> {
+        AttributeTypeAndValue { id, value }
     }
 
     fn parse(input: &'a [u8]) -> Result<AttributeTypeAndValue<'a>, ASNError> {
         Parser::parse_all(input, |parser| {
-            Ok(AttributeTypeAndValue::new( parser.expect::<ObjectIdentifier>()?,  parser.expect_any()?))
+            Ok(AttributeTypeAndValue::new(
+                parser.expect::<ObjectIdentifier>()?,
+                parser.expect_any()?,
+            ))
         })
     }
 }
 
 impl<'a> Printable for AttributeTypeAndValue<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         printer.begin_line();
         printer.println_fmt(&format_args!("id: {}", self.id));
         printer.begin_line();
@@ -181,20 +195,18 @@ impl<'a> Printable for AttributeTypeAndValue<'a> {
 
 #[derive(Debug)]
 pub struct RelativeDistinguishedName<'a> {
-    values : Vec<AttributeTypeAndValue<'a>>
+    values: Vec<AttributeTypeAndValue<'a>>,
 }
 
 impl<'a> RelativeDistinguishedName<'a> {
-
     fn new(values: Vec<AttributeTypeAndValue<'a>>) -> RelativeDistinguishedName<'a> {
         RelativeDistinguishedName { values }
     }
 
     fn parse(input: &'a [u8]) -> Result<RelativeDistinguishedName<'a>, ASNError> {
-
         let mut parser = Parser::new(input);
 
-        let mut entries : Vec<AttributeTypeAndValue> = Vec::new();
+        let mut entries: Vec<AttributeTypeAndValue> = Vec::new();
 
         // expect at least one entry!
         entries.push(AttributeTypeAndValue::parse(parser.expect::<Sequence>()?)?);
@@ -209,7 +221,7 @@ impl<'a> RelativeDistinguishedName<'a> {
 
 #[derive(Debug)]
 pub struct Name<'a> {
-    pub values: Vec<RelativeDistinguishedName<'a>>
+    pub values: Vec<RelativeDistinguishedName<'a>>,
 }
 
 impl<'a> Name<'a> {
@@ -218,13 +230,12 @@ impl<'a> Name<'a> {
     }
 
     fn parse(input: &[u8]) -> Result<Name, ASNError> {
-
         let mut parser = Parser::new(input);
 
-        let mut values : Vec<RelativeDistinguishedName> = Vec::new();
+        let mut values: Vec<RelativeDistinguishedName> = Vec::new();
 
         while let Some(set) = parser.expect_or_end::<Set>()? {
-            values.push( RelativeDistinguishedName::parse(set)?);
+            values.push(RelativeDistinguishedName::parse(set)?);
         }
 
         Ok(Name::new(values))
@@ -232,7 +243,7 @@ impl<'a> Name<'a> {
 }
 
 impl<'a> Printable for Name<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         for rdn in &self.values {
             for attr in &rdn.values {
                 printer.begin_type();
@@ -246,90 +257,107 @@ impl<'a> Printable for Name<'a> {
 #[derive(Debug)]
 pub struct SubjectPublicKeyInfo<'a> {
     pub algorithm: AlgorithmIdentifier<'a>,
-    pub subject_public_key: ASNBitString<'a>
+    pub subject_public_key: ASNBitString<'a>,
 }
 
 impl<'a> SubjectPublicKeyInfo<'a> {
-
-    fn new(algorithm: AlgorithmIdentifier<'a>, subject_public_key: ASNBitString<'a>) -> SubjectPublicKeyInfo<'a> {
-        SubjectPublicKeyInfo { algorithm, subject_public_key}
+    fn new(
+        algorithm: AlgorithmIdentifier<'a>,
+        subject_public_key: ASNBitString<'a>,
+    ) -> SubjectPublicKeyInfo<'a> {
+        SubjectPublicKeyInfo {
+            algorithm,
+            subject_public_key,
+        }
     }
 
     fn parse(input: &[u8]) -> Result<SubjectPublicKeyInfo, ASNError> {
-
         Parser::parse_all(input, |parser| {
             Ok(SubjectPublicKeyInfo::new(
                 AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
-                parser.expect::<BitString>()?
+                parser.expect::<BitString>()?,
             ))
         })
     }
 }
 
 impl<'a> Printable for SubjectPublicKeyInfo<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         print_type("algorithm", &self.algorithm, printer);
         print_type("subject public key", &self.subject_public_key, printer);
     }
 }
 
 impl<'a> Certificate<'a> {
-
     pub fn parse(input: &[u8]) -> Result<Certificate, ASNError> {
-
         Parser::parse_all(input, |parser| {
-            Ok(
-                Certificate::new(
+            Ok(Certificate::new(
                 TBSCertificate::parse(parser.expect::<Sequence>()?)?,
                 AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
-                parser.expect::<BitString>()?
-                )
-            )
+                parser.expect::<BitString>()?,
+            ))
         })
     }
 
-    pub fn new(tbs_certificate : Constructed<'a, TBSCertificate<'a>>,
-           signature_algorithm : AlgorithmIdentifier<'a>,
-           signature_value : ASNBitString<'a>) -> Certificate<'a> {
-
-        Certificate { tbs_certificate, signature_algorithm, signature_value }
+    pub fn new(
+        tbs_certificate: Constructed<'a, TBSCertificate<'a>>,
+        signature_algorithm: AlgorithmIdentifier<'a>,
+        signature_value: ASNBitString<'a>,
+    ) -> Certificate<'a> {
+        Certificate {
+            tbs_certificate,
+            signature_algorithm,
+            signature_value,
+        }
     }
-
 }
 
 impl<'a> AlgorithmIdentifier<'a> {
-
     fn parse(input: &[u8]) -> Result<AlgorithmIdentifier, ASNError> {
-
         let mut parser = Parser::new(input);
 
-        Ok(AlgorithmIdentifier::new(parser.expect::<ObjectIdentifier>()?, parser.expect_any_or_end()?))
+        Ok(AlgorithmIdentifier::new(
+            parser.expect::<ObjectIdentifier>()?,
+            parser.expect_any_or_end()?,
+        ))
     }
 
-    pub fn new(algorithm : ASNObjectIdentifier, parameters : Option<ASNType>) -> AlgorithmIdentifier {
-        AlgorithmIdentifier { algorithm, parameters }
+    pub fn new(algorithm: ASNObjectIdentifier, parameters: Option<ASNType>) -> AlgorithmIdentifier {
+        AlgorithmIdentifier {
+            algorithm,
+            parameters,
+        }
     }
-
 }
 
-
 impl<'a> TBSCertificate<'a> {
-
-    pub fn new(version : Version,
-               serial_number : ASNInteger<'a>,
-               signature : AlgorithmIdentifier<'a>,
-               issuer : Name<'a>,
-               validity: Validity,
-               subject : Name<'a>,
-               subject_public_key_info : SubjectPublicKeyInfo<'a>,
-               issuer_unique_id : Option<ASNBitString<'a>>,
-               subject_unique_id : Option<ASNBitString<'a>>,
-               extensions : Vec<Extension<'a>>) -> TBSCertificate<'a> {
-        TBSCertificate { version, serial_number, signature, issuer, validity, subject, subject_public_key_info, issuer_unique_id, subject_unique_id, extensions }
+    pub fn new(
+        version: Version,
+        serial_number: ASNInteger<'a>,
+        signature: AlgorithmIdentifier<'a>,
+        issuer: Name<'a>,
+        validity: Validity,
+        subject: Name<'a>,
+        subject_public_key_info: SubjectPublicKeyInfo<'a>,
+        issuer_unique_id: Option<ASNBitString<'a>>,
+        subject_unique_id: Option<ASNBitString<'a>>,
+        extensions: Vec<Extension<'a>>,
+    ) -> TBSCertificate<'a> {
+        TBSCertificate {
+            version,
+            serial_number,
+            signature,
+            issuer,
+            validity,
+            subject,
+            subject_public_key_info,
+            issuer_unique_id,
+            subject_unique_id,
+            extensions,
+        }
     }
 
     fn parse(input: &[u8]) -> Result<Constructed<TBSCertificate>, ASNError> {
-
         fn parse_version(parser: &mut Parser) -> Result<Version, ASNError> {
             match parser.get_optional_explicit_tag_value::<Integer>(0)? {
                 Some(value) => match value.as_i32() {
@@ -337,19 +365,22 @@ impl<'a> TBSCertificate<'a> {
                     Some(1) => Ok(Version::V2),
                     Some(2) => Ok(Version::V3),
                     Some(x) => Err(ASNError::BadEnumValue("version", x)),
-                    None => Err(ASNError::IntegerTooLarge(value.bytes.len()))
+                    None => Err(ASNError::IntegerTooLarge(value.bytes.len())),
                 },
-                None => Ok(Version::V1)
+                None => Ok(Version::V1),
             }
         }
 
-        fn parse_optional_bitstring<'a>(parser: &mut Parser<'a>, tag: u8) -> Result<Option<ASNBitString<'a>>, ASNError> {
+        fn parse_optional_bitstring<'a>(
+            parser: &mut Parser<'a>,
+            tag: u8,
+        ) -> Result<Option<ASNBitString<'a>>, ASNError> {
             // TODO: check minimum version
             match parser.get_optional_explicit_tag(tag)? {
-                Some(tag) => {
-                    Parser::parse_all(tag.contents, |parser| { Ok(Some(parser.expect::<BitString>()?))})
-                }
-                None => Ok(None)
+                Some(tag) => Parser::parse_all(tag.contents, |parser| {
+                    Ok(Some(parser.expect::<BitString>()?))
+                }),
+                None => Ok(None),
             }
         }
 
@@ -369,24 +400,23 @@ impl<'a> TBSCertificate<'a> {
         }
 
         fn parse_tbs_cert<'a>(parser: &mut Parser<'a>) -> Result<TBSCertificate<'a>, ASNError> {
-            Ok(
-                    TBSCertificate::new(
-                        parse_version(parser)?,
-                        parser.expect::<Integer>()?,
-                        AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
-                        Name::parse(parser.expect::<Sequence>()?)?,
-                        Validity::parse(parser.expect::<Sequence>()?)?,
-                        Name::parse(parser.expect::<Sequence>()?)?,
-                        SubjectPublicKeyInfo::parse(parser.expect::<Sequence>()?)?,
-                        parse_optional_bitstring(parser, 1)?,
-                        parse_optional_bitstring(parser, 2)?,
-                        parse_extensions(parser)?,
-                    )
-            )
+            Ok(TBSCertificate::new(
+                parse_version(parser)?,
+                parser.expect::<Integer>()?,
+                AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
+                Name::parse(parser.expect::<Sequence>()?)?,
+                Validity::parse(parser.expect::<Sequence>()?)?,
+                Name::parse(parser.expect::<Sequence>()?)?,
+                SubjectPublicKeyInfo::parse(parser.expect::<Sequence>()?)?,
+                parse_optional_bitstring(parser, 1)?,
+                parse_optional_bitstring(parser, 2)?,
+                parse_extensions(parser)?,
+            ))
         }
 
-        Ok(Constructed::new(input, Parser::parse_all(input, parse_tbs_cert)?))
+        Ok(Constructed::new(
+            input,
+            Parser::parse_all(input, parse_tbs_cert)?,
+        ))
     }
 }
-
-

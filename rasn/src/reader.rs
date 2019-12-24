@@ -1,20 +1,16 @@
-
-
 pub struct Reader<'a> {
-    bytes : &'a [u8]
+    bytes: &'a [u8],
 }
-
 
 #[derive(Debug)]
 pub struct EndOfStream;
 
 impl<'a> Reader<'a> {
-
-    pub fn new(bytes : &'a [u8]) -> Reader {
-        Reader{ bytes }
+    pub fn new(bytes: &'a [u8]) -> Reader {
+        Reader { bytes }
     }
 
-    pub fn clear(&mut self) -> ()  {
+    pub fn clear(&mut self) -> () {
         self.bytes = &[];
     }
 
@@ -29,8 +25,7 @@ impl<'a> Reader<'a> {
     pub fn peek_or_fail(&self) -> Result<u8, EndOfStream> {
         if self.bytes.is_empty() {
             Err(EndOfStream)
-        }
-        else {
+        } else {
             Ok(self.bytes[0])
         }
     }
@@ -38,8 +33,7 @@ impl<'a> Reader<'a> {
     pub fn read_byte(&mut self) -> Result<u8, EndOfStream> {
         if self.bytes.is_empty() {
             Err(EndOfStream)
-        }
-        else {
+        } else {
             let value: u8 = self.bytes[0];
             self.bytes = &self.bytes[1..];
             Ok(value)
@@ -49,8 +43,7 @@ impl<'a> Reader<'a> {
     pub fn take(&mut self, count: usize) -> Result<&'a [u8], EndOfStream> {
         if self.bytes.len() < count {
             Err(EndOfStream)
-        }
-        else {
+        } else {
             let ret = &self.bytes[0..count];
             self.bytes = &self.bytes[count..];
             Ok(ret)

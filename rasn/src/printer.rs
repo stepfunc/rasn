@@ -1,23 +1,21 @@
-
 pub trait LinePrinter {
-
     fn begin_type(&mut self);
 
     fn begin_line(&mut self);
 
-    fn print_fmt(&mut self, fmt : &std::fmt::Arguments);
-    fn print_str(&mut self, s : &str);
-    fn println_fmt(&mut self, fmt : &std::fmt::Arguments);
-    fn println_str(&mut self, line : &str);
+    fn print_fmt(&mut self, fmt: &std::fmt::Arguments);
+    fn print_str(&mut self, s: &str);
+    fn println_fmt(&mut self, fmt: &std::fmt::Arguments);
+    fn println_str(&mut self, line: &str);
 
     fn end_type(&mut self);
 }
 
 pub trait Printable {
-    fn print(&self, printer: &mut LinePrinter) -> ();
+    fn print(&self, printer: &mut dyn LinePrinter) -> ();
 }
 
-pub fn print_type(name: &str, printable: &Printable, printer: &mut LinePrinter) {
+pub fn print_type(name: &str, printable: &dyn Printable, printer: &mut dyn LinePrinter) {
     printer.begin_line();
     printer.println_fmt(&format_args!("{}:", name));
     printer.begin_type();
@@ -26,32 +24,31 @@ pub fn print_type(name: &str, printable: &Printable, printer: &mut LinePrinter) 
 }
 
 pub struct ConsoleLinePrinter {
-    indent : usize
+    indent: usize,
 }
 
 impl ConsoleLinePrinter {
     pub fn new() -> ConsoleLinePrinter {
-        ConsoleLinePrinter { indent : 0 }
+        ConsoleLinePrinter { indent: 0 }
     }
 
     fn print_indent(&self) {
-        for _ in 0 .. self.indent {
+        for _ in 0..self.indent {
             print!("  ")
         }
     }
 }
 
 impl LinePrinter for ConsoleLinePrinter {
-
-    fn begin_type(&mut self){
+    fn begin_type(&mut self) {
         self.indent += 1;
     }
 
-    fn begin_line(&mut self){
+    fn begin_line(&mut self) {
         self.print_indent();
     }
 
-    fn print_fmt(&mut self, args : &std::fmt::Arguments) {
+    fn print_fmt(&mut self, args: &std::fmt::Arguments) {
         print!("{}", args)
     }
 
@@ -59,7 +56,7 @@ impl LinePrinter for ConsoleLinePrinter {
         print!("{}", s)
     }
 
-    fn println_fmt(&mut self, args: &std::fmt::Arguments){
+    fn println_fmt(&mut self, args: &std::fmt::Arguments) {
         println!("{}", args)
     }
 

@@ -3,26 +3,24 @@ extern crate rasn;
 mod der_printer;
 
 use std::env;
-use std::process;
-use std::io::prelude::*;
 use std::fs::File;
+use std::io::prelude::*;
+use std::process;
 
 use rasn::parse_all::parse_all;
-use rasn::x509::Certificate;
 use rasn::printer::{ConsoleLinePrinter, Printable};
-
+use rasn::x509::Certificate;
 
 fn get_bytes(file: &String) -> Result<Vec<u8>, std::io::Error> {
     let mut f = File::open(file)?;
-    let mut vec : Vec<u8> = Vec::new();
+    let mut vec: Vec<u8> = Vec::new();
     f.read_to_end(&mut vec)?;
     Ok(vec)
 }
 
 pub fn main() -> Result<(), std::io::Error> {
-
     fn parse_der(bytes: &[u8]) -> Result<(), std::io::Error> {
-        parse_all(bytes, &mut der_printer::ParsePrinter::new()).or_else( |err| {
+        parse_all(bytes, &mut der_printer::ParsePrinter::new()).or_else(|err| {
             eprintln!("Error: {}", err);
             Ok(())
         })
@@ -30,8 +28,8 @@ pub fn main() -> Result<(), std::io::Error> {
 
     fn parse_x509(bytes: &[u8]) -> Result<(), std::io::Error> {
         match Certificate::parse(bytes) {
-            Ok(cert) =>  cert.print(&mut ConsoleLinePrinter::new()),
-            Err(err) => eprintln!("Error: {}", err)
+            Ok(cert) => cert.print(&mut ConsoleLinePrinter::new()),
+            Err(err) => eprintln!("Error: {}", err),
         };
 
         Ok(())

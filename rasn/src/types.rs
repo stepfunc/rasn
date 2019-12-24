@@ -1,13 +1,13 @@
 extern crate chrono;
 
-use reader;
-use oid::get_oid;
-use std::fmt::Display;
 use chrono::{DateTime, FixedOffset};
+use oid::get_oid;
+use reader;
+use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
 pub struct ASNInteger<'a> {
-    pub bytes: &'a[u8]
+    pub bytes: &'a [u8],
 }
 
 #[derive(Debug, PartialEq)]
@@ -15,40 +15,40 @@ pub enum TagClass {
     Universal,
     Application,
     ContextSpecific,
-    Private
+    Private,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum PC {
     Primitive,
-    Constructed
+    Constructed,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Identifier {
-    pub class : TagClass,
-    pub pc : PC,
-    pub tag: u8
+    pub class: TagClass,
+    pub pc: PC,
+    pub tag: u8,
 }
 
 impl Identifier {
-
-    pub fn new(class : TagClass, pc : PC, tag: u8) -> Identifier{
+    pub fn new(class: TagClass, pc: PC, tag: u8) -> Identifier {
         Identifier { class, pc, tag }
     }
 
     pub fn from(byte: u8) -> Identifier {
-
         let class = match byte & 0b11000000 {
             0b00000000 => TagClass::Universal,
             0b01000000 => TagClass::Application,
             0b10000000 => TagClass::ContextSpecific,
-            _ => TagClass::Private
+            _ => TagClass::Private,
         };
 
         let pc = if (byte & 0b00100000) != 0 {
             PC::Constructed
-        } else { PC::Primitive };
+        } else {
+            PC::Primitive
+        };
 
         let tag = byte & 0b00011111;
 
@@ -57,21 +57,19 @@ impl Identifier {
 }
 
 impl<'a> ASNInteger<'a> {
+    const VALID_I32_LENGTHS: std::ops::Range<usize> = 1usize..4usize;
 
-    const VALID_I32_LENGTHS : std::ops::Range<usize> = 1usize..4usize;
-
-    pub fn new(bytes: &'a[u8]) -> ASNInteger {
-        ASNInteger{bytes}
+    pub fn new(bytes: &'a [u8]) -> ASNInteger {
+        ASNInteger { bytes }
     }
 
     pub fn as_i32(&self) -> Option<i32> {
-
         // can only parse values with length in [1,4] bytes
         if !ASNInteger::VALID_I32_LENGTHS.contains(&self.bytes.len()) {
             return None;
         }
 
-        let mut acc : i32 = 0;
+        let mut acc: i32 = 0;
         for byte in self.bytes {
             acc <<= 8;
             acc |= *byte as i32;
@@ -103,20 +101,19 @@ pub struct ASNBitString<'a> {
     // the number of unused bits in last octet [0, 7]
     unused_bits: u8,
     // the octets, the last one only has (8 - unused_bits) bits
-    bytes: &'a[u8]
+    bytes: &'a [u8],
 }
 
 impl<'a> ASNBitString<'a> {
-    pub fn new(unused_bits: u8, bytes: &'a[u8]) -> ASNBitString<'a> {
-        ASNBitString{ unused_bits, bytes}
+    pub fn new(unused_bits: u8, bytes: &'a [u8]) -> ASNBitString<'a> {
+        ASNBitString { unused_bits, bytes }
     }
 
     // convertible to octets if it's all full bytes
     pub fn octets(&self) -> Option<&[u8]> {
         if self.unused_bits == 0 {
             Some(self.bytes)
-        }
-        else {
+        } else {
             None
         }
     }
@@ -139,7 +136,7 @@ impl<'a> ASNBitStringIterator<'a> {
     fn new(bit_string: &'a ASNBitString<'a>) -> ASNBitStringIterator<'a> {
         ASNBitStringIterator {
             bit_string,
-            current_bit: 0
+            current_bit: 0,
         }
     }
 }
@@ -149,7 +146,11 @@ impl<'a> Iterator for ASNBitStringIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_bit < self.bit_string.size() {
-            let result = Some(self.bit_string.bytes[self.current_bit / 8] << ((self.current_bit % 8) as u8) & 0x80 != 0);
+            let result = Some(
+                self.bit_string.bytes[self.current_bit / 8] << ((self.current_bit % 8) as u8)
+                    & 0x80
+                    != 0,
+            );
             self.current_bit += 1;
             result
         } else {
@@ -161,25 +162,23 @@ impl<'a> Iterator for ASNBitStringIterator<'a> {
 #[derive(Debug, PartialEq)]
 pub struct ASNExplicitTag<'a> {
     pub value: u8,
-    pub contents: &'a[u8]
+    pub contents: &'a [u8],
 }
 
 impl<'a> ASNExplicitTag<'a> {
-    pub fn new(value: u8, contents: &'a[u8]) -> ASNExplicitTag<'a> {
-        ASNExplicitTag{ value, contents}
+    pub fn new(value: u8, contents: &'a [u8]) -> ASNExplicitTag<'a> {
+        ASNExplicitTag { value, contents }
     }
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ASNObjectIdentifier {
-    items: Vec<u32>
+    items: Vec<u32>,
 }
 
 impl ASNObjectIdentifier {
     pub fn new(items: Vec<u32>) -> ASNObjectIdentifier {
-        ASNObjectIdentifier {
-            items
-        }
+        ASNObjectIdentifier { items }
     }
 
     pub fn values(&self) -> &[u32] {
@@ -214,7 +213,7 @@ pub trait ASNWrapperType<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct Boolean {
-    pub value: bool
+    pub value: bool,
 }
 impl Boolean {
     pub fn new<'a>(value: bool) -> ASNType<'a> {
@@ -238,7 +237,7 @@ impl<'a> ASNWrapperType<'a> for Boolean {
 
 #[derive(Debug, PartialEq)]
 pub struct Integer<'a> {
-    pub value: ASNInteger<'a>
+    pub value: ASNInteger<'a>,
 }
 impl<'a> Integer<'a> {
     pub fn new(value: ASNInteger<'a>) -> ASNType<'a> {
@@ -262,7 +261,7 @@ impl<'a> ASNWrapperType<'a> for Integer<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct PrintableString<'a> {
-    pub value: &'a str
+    pub value: &'a str,
 }
 impl<'a> PrintableString<'a> {
     pub fn new(value: &'a str) -> ASNType<'a> {
@@ -286,7 +285,7 @@ impl<'a> ASNWrapperType<'a> for PrintableString<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct IA5String<'a> {
-    pub value: &'a str
+    pub value: &'a str,
 }
 impl<'a> IA5String<'a> {
     pub fn new(value: &'a str) -> ASNType<'a> {
@@ -310,7 +309,7 @@ impl<'a> ASNWrapperType<'a> for IA5String<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct UTF8String<'a> {
-    pub value: &'a str
+    pub value: &'a str,
 }
 impl<'a> UTF8String<'a> {
     pub fn new(value: &'a str) -> ASNType<'a> {
@@ -334,7 +333,7 @@ impl<'a> ASNWrapperType<'a> for UTF8String<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct Sequence<'a> {
-    pub value: &'a [u8]
+    pub value: &'a [u8],
 }
 impl<'a> Sequence<'a> {
     pub fn new(value: &'a [u8]) -> ASNType<'a> {
@@ -358,7 +357,7 @@ impl<'a> ASNWrapperType<'a> for Sequence<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct Set<'a> {
-    pub value: &'a [u8]
+    pub value: &'a [u8],
 }
 impl<'a> Set<'a> {
     pub fn new(value: &'a [u8]) -> ASNType<'a> {
@@ -382,7 +381,7 @@ impl<'a> ASNWrapperType<'a> for Set<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct ObjectIdentifier {
-    pub value: ASNObjectIdentifier
+    pub value: ASNObjectIdentifier,
 }
 impl ObjectIdentifier {
     pub fn new<'a>(value: ASNObjectIdentifier) -> ASNType<'a> {
@@ -406,7 +405,7 @@ impl<'a> ASNWrapperType<'a> for ObjectIdentifier {
 
 #[derive(Debug, PartialEq)]
 pub struct OctetString<'a> {
-    pub value: &'a [u8]
+    pub value: &'a [u8],
 }
 impl<'a> OctetString<'a> {
     pub fn new(value: &'a [u8]) -> ASNType<'a> {
@@ -430,7 +429,7 @@ impl<'a> ASNWrapperType<'a> for OctetString<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct BitString<'a> {
-    pub value: ASNBitString<'a>
+    pub value: ASNBitString<'a>,
 }
 impl<'a> BitString<'a> {
     pub fn new(value: ASNBitString<'a>) -> ASNType<'a> {
@@ -454,7 +453,7 @@ impl<'a> ASNWrapperType<'a> for BitString<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct UtcTime {
-    pub value: DateTime<FixedOffset>
+    pub value: DateTime<FixedOffset>,
 }
 impl UtcTime {
     pub fn new<'a>(value: DateTime<FixedOffset>) -> ASNType<'a> {
@@ -478,7 +477,7 @@ impl<'a> ASNWrapperType<'a> for UtcTime {
 
 #[derive(Debug, PartialEq)]
 pub struct ExplicitTag<'a> {
-    pub value: ASNExplicitTag<'a>
+    pub value: ASNExplicitTag<'a>,
 }
 impl<'a> ExplicitTag<'a> {
     pub fn new(value: ASNExplicitTag<'a>) -> ASNType<'a> {
@@ -514,7 +513,7 @@ pub enum ASNType<'a> {
     BitString(BitString<'a>),
     OctetString(OctetString<'a>),
     ObjectIdentifier(ObjectIdentifier),
-    ExplicitTag(ExplicitTag<'a>)
+    ExplicitTag(ExplicitTag<'a>),
 }
 
 // An identifier for the type that carries no data
@@ -533,7 +532,7 @@ pub enum ASNTypeId {
     BitString,
     OctetString,
     ObjectIdentifier,
-    ExplicitTag
+    ExplicitTag,
 }
 
 impl<'a> ASNType<'a> {
@@ -551,7 +550,7 @@ impl<'a> ASNType<'a> {
             ASNType::BitString(_) => ASNTypeId::BitString,
             ASNType::OctetString(_) => ASNTypeId::OctetString,
             ASNType::ObjectIdentifier(_) => ASNTypeId::ObjectIdentifier,
-            ASNType::ExplicitTag(_) => ASNTypeId::ExplicitTag
+            ASNType::ExplicitTag(_) => ASNTypeId::ExplicitTag,
         }
     }
 }
@@ -559,46 +558,28 @@ impl<'a> ASNType<'a> {
 impl<'a> std::fmt::Display for ASNType<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ASNType::Boolean(wrapper) => {
-                write!(f, "Boolean: {}", wrapper.value)
-            }
-            ASNType::Sequence(_) => {
-                write!(f, "Sequence")
-            }
-            ASNType::Set(_) => {
-                write!(f, "Set")
-            },
+            ASNType::Boolean(wrapper) => write!(f, "Boolean: {}", wrapper.value),
+            ASNType::Sequence(_) => write!(f, "Sequence"),
+            ASNType::Set(_) => write!(f, "Set"),
             ASNType::UTF8String(wrapper) => {
                 f.write_str("UTF8String: ")?;
                 f.write_str(wrapper.value)
-            },
+            }
             ASNType::PrintableString(wrapper) => {
                 f.write_str("PrintableString: ")?;
                 f.write_str(wrapper.value)
-            },
+            }
             ASNType::IA5String(wrapper) => {
                 f.write_str("IA5String: ")?;
                 f.write_str(wrapper.value)
-            },
+            }
             ASNType::Integer(wrapper) => write!(f, "Integer: {}", wrapper.value),
-            ASNType::Null => {
-                f.write_str("Null")
-            },
-            ASNType::ObjectIdentifier(wrapper) => {
-                write!(f, "ObjectIdentifier: {}", wrapper.value)
-            }
-            ASNType::UTCTime(wrapper) => {
-                write!(f, "UTCTime: {}", wrapper.value)
-            }
-            ASNType::BitString(_) => {
-                f.write_str("BitString")
-            }
-            ASNType::OctetString(_) => {
-                f.write_str("OctetString")
-            }
-            ASNType::ExplicitTag(wrapper) => {
-                write!(f,"[{}]", wrapper.value.value)
-            }
+            ASNType::Null => f.write_str("Null"),
+            ASNType::ObjectIdentifier(wrapper) => write!(f, "ObjectIdentifier: {}", wrapper.value),
+            ASNType::UTCTime(wrapper) => write!(f, "UTCTime: {}", wrapper.value),
+            ASNType::BitString(_) => f.write_str("BitString"),
+            ASNType::OctetString(_) => f.write_str("OctetString"),
+            ASNType::ExplicitTag(wrapper) => write!(f, "[{}]", wrapper.value.value),
         }
     }
 }
@@ -621,12 +602,12 @@ pub enum ASNError {
     BadUTCTime(chrono::format::ParseError),
     BitStringUnusedBitsTooLarge(u8),
     // these errors relate to schemas
-    UnexpectedType(ASNTypeId, ASNTypeId),  // the expected type followed by the actual type
-    ExpectedEnd(ASNTypeId),                // type present instead of end
-    IntegerTooLarge(usize),                // count of bytes
-    BadEnumValue(&'static str, i32),       // name of the enum and the bad integer value
-    UnexpectedOid(ASNObjectIdentifier),    // unexpected object identifier
-    UnexpectedTag(u8),                     // unexpected tag
+    UnexpectedType(ASNTypeId, ASNTypeId), // the expected type followed by the actual type
+    ExpectedEnd(ASNTypeId),               // type present instead of end
+    IntegerTooLarge(usize),               // count of bytes
+    BadEnumValue(&'static str, i32),      // name of the enum and the bad integer value
+    UnexpectedOid(ASNObjectIdentifier),   // unexpected object identifier
+    UnexpectedTag(u8),                    // unexpected tag
 }
 
 impl std::convert::From<reader::EndOfStream> for ASNError {
@@ -644,45 +625,31 @@ impl std::convert::From<std::str::Utf8Error> for ASNError {
 impl std::fmt::Display for ASNError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ASNError::BadBooleanLength(len) => {
-               write!(f, "Bad boolean length: {}", len)
-            }
-            ASNError::BadBooleanValue(value) => {
-                write!(f, "Bad boolean value: {}", value)
-            }
-            ASNError::ZeroLengthInteger => {
-                f.write_str("zero length integer")
-            }
+            ASNError::BadBooleanLength(len) => write!(f, "Bad boolean length: {}", len),
+            ASNError::BadBooleanValue(value) => write!(f, "Bad boolean value: {}", value),
+            ASNError::ZeroLengthInteger => f.write_str("zero length integer"),
             ASNError::NullWithNonEmptyContents(length) => {
                 write!(f, "NULL type w/ non-empty contents (length == {})", length)
             }
-            ASNError::UnsupportedId(id) => {
-                write!(f, "Unsupported id: {:?})", id)
-            }
+            ASNError::UnsupportedId(id) => write!(f, "Unsupported id: {:?})", id),
             ASNError::UnsupportedIndefiniteLength => {
                 f.write_str("Encountered indefinite length encoding. Not allowed in DER.")
             }
-            ASNError::ReservedLengthValue => {
-                f.write_str("Length byte count of 127 is reserved")
-            }
+            ASNError::ReservedLengthValue => f.write_str("Length byte count of 127 is reserved"),
             ASNError::UnsupportedLengthByteCount(length) => {
                 write!(f, "Length byte count of {} not supported", length)
             }
             ASNError::BadLengthEncoding(value) => {
                 write!(f, "Length should be encoded as a single byte: {}", value)
             }
-            ASNError::BadOidLength => {
-                f.write_str("Bad OID length")
-            }
-            ASNError::BadUTF8(err) => {
-                write!(f, "Bad UTF8 encoding: {}", err)
-            }
-            ASNError::BadUTCTime(err) => {
-                write!(f, "Bad UTC time string: {}", err)
-            }
-            ASNError::BitStringUnusedBitsTooLarge(unused) => {
-                write!(f, "Bit string w/ unused bits outside range [0..7]: {}", unused)
-            }
+            ASNError::BadOidLength => f.write_str("Bad OID length"),
+            ASNError::BadUTF8(err) => write!(f, "Bad UTF8 encoding: {}", err),
+            ASNError::BadUTCTime(err) => write!(f, "Bad UTC time string: {}", err),
+            ASNError::BitStringUnusedBitsTooLarge(unused) => write!(
+                f,
+                "Bit string w/ unused bits outside range [0..7]: {}",
+                unused
+            ),
             ASNError::EndOfStream => {
                 f.write_str("Consumed all input before parsing required fields")
             }
@@ -692,19 +659,18 @@ impl std::fmt::Display for ASNError {
             ASNError::ExpectedEnd(actual) => {
                 write!(f, "Expected end of stream but type is {:?}", actual)
             }
-            ASNError::IntegerTooLarge(num_bytes) => {
-                write!(f, "The integer length exceeds the representation of i32: {}", num_bytes)
-            }
+            ASNError::IntegerTooLarge(num_bytes) => write!(
+                f,
+                "The integer length exceeds the representation of i32: {}",
+                num_bytes
+            ),
             ASNError::BadEnumValue(name, value) => {
                 write!(f, "The enum '{}' has not mapping for value {}", name, value)
             }
             ASNError::UnexpectedOid(oid) => {
                 write!(f, "The Object Identifier '{}' was unexpected.", oid)
             }
-            ASNError::UnexpectedTag(tag) => {
-                write!(f, "The explicit tag '{}' was unexpected.", tag)
-            }
+            ASNError::UnexpectedTag(tag) => write!(f, "The explicit tag '{}' was unexpected.", tag),
         }
     }
 }
-

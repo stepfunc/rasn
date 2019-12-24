@@ -1,10 +1,9 @@
-
 use chrono;
 use std::str;
 
 use reader::Reader;
-use types::*;
 use types::ASNError::UnsupportedId;
+use types::*;
 
 type ASNResult<'a> = Result<ASNType<'a>, ASNError>;
 
@@ -19,8 +18,7 @@ fn parse_set(contents: &[u8]) -> ASNResult {
 fn parse_null(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Ok(ASNType::Null)
-    }
-    else {
+    } else {
         Err(ASNError::NullWithNonEmptyContents(contents.len()))
     }
 }
@@ -30,51 +28,51 @@ fn parse_boolean(contents: &[u8]) -> ASNResult {
         [0xFF] => Ok(Boolean::new(true)),
         [0x00] => Ok(Boolean::new(false)),
         [x] => Err(ASNError::BadBooleanValue(*x)),
-        _ => Err(ASNError::BadBooleanLength(contents.len()))
+        _ => Err(ASNError::BadBooleanLength(contents.len())),
     }
 }
 
 fn parse_integer(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Err(ASNError::ZeroLengthInteger)
-    }
-    else {
+    } else {
         Ok(Integer::new(ASNInteger::new(contents)))
     }
 }
 
-const UTC_WITH_SECONDS : &str = "%y%m%d%H%M%SZ";
-const UTC_WITHOUT_SECONDS : &str = "%y%m%d%H%MZ";
+const UTC_WITH_SECONDS: &str = "%y%m%d%H%M%SZ";
+const UTC_WITHOUT_SECONDS: &str = "%y%m%d%H%MZ";
 const TZ_WITH_SECONDS: &str = "%y%m%d%H%M%S%z";
 const TZ_WITHOUT_SECONDS: &str = "%y%m%d%H%M%z";
 
 fn parse_utc_time(contents: &[u8]) -> ASNResult {
-
-    fn try_parse_all_variants(s: &str) -> Result<chrono::DateTime<chrono::FixedOffset>, chrono::ParseError> {
+    fn try_parse_all_variants(
+        s: &str,
+    ) -> Result<chrono::DateTime<chrono::FixedOffset>, chrono::ParseError> {
         // try the explicitly UTC variant
-        chrono::NaiveDateTime::parse_from_str(s,UTC_WITH_SECONDS)
-            .or_else(|_|  chrono::NaiveDateTime::parse_from_str(s, UTC_WITHOUT_SECONDS))
+        chrono::NaiveDateTime::parse_from_str(s, UTC_WITH_SECONDS)
+            .or_else(|_| chrono::NaiveDateTime::parse_from_str(s, UTC_WITHOUT_SECONDS))
             .map(|t| chrono::DateTime::from_utc(t, chrono::FixedOffset::east(0)))
-            .or_else(|_| chrono::DateTime::parse_from_str(s,TZ_WITH_SECONDS))
+            .or_else(|_| chrono::DateTime::parse_from_str(s, TZ_WITH_SECONDS))
             .or_else(|_| chrono::DateTime::parse_from_str(s, TZ_WITHOUT_SECONDS))
     }
 
     match try_parse_all_variants(str::from_utf8(contents)?) {
         Ok(time) => Ok(UtcTime::new(time)),
-        Err(err) => Err(ASNError::BadUTCTime(err))
+        Err(err) => Err(ASNError::BadUTCTime(err)),
     }
 }
 
-fn parse_string<T : Fn(&str) -> ASNType>(contents: &[u8], create: T) -> ASNResult {
+fn parse_string<T: Fn(&str) -> ASNType>(contents: &[u8], create: T) -> ASNResult {
     match str::from_utf8(contents) {
         Ok(x) => Ok(create(x)),
-        Err(x) => Err(ASNError::BadUTF8(x))
+        Err(x) => Err(ASNError::BadUTF8(x)),
     }
 }
 
 fn parse_bit_string(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
-        return Err(ASNError::EndOfStream)
+        return Err(ASNError::EndOfStream);
     }
 
     let unused_bits = contents[0];
@@ -82,22 +80,25 @@ fn parse_bit_string(contents: &[u8]) -> ASNResult {
         return Err(ASNError::BitStringUnusedBitsTooLarge(unused_bits));
     }
 
-    Ok(BitString::new(ASNBitString::new(unused_bits, &contents[1..])))
+    Ok(BitString::new(ASNBitString::new(
+        unused_bits,
+        &contents[1..],
+    )))
 }
 
 fn parse_object_identifier(contents: &[u8]) -> ASNResult {
-
     fn parse_one<'a>(reader: &mut Reader) -> Result<u32, ASNError> {
-        let mut sum : u32 = 0;
+        let mut sum: u32 = 0;
         let mut count: u32 = 0;
         loop {
-
             // only allow 4*7 = 28 bits so that we don't overflow u32
-            if count > 3 { return Err(ASNError::BadOidLength) };
+            if count > 3 {
+                return Err(ASNError::BadOidLength);
+            };
 
             let next_byte = reader.read_byte()?;
-            let has_next : bool = (next_byte & 0b10000000) != 0;
-            let value : u32 = (next_byte & 0b01111111) as u32;
+            let has_next: bool = (next_byte & 0b10000000) != 0;
+            let value: u32 = (next_byte & 0b01111111) as u32;
 
             sum <<= 7;
             sum += value;
@@ -105,14 +106,14 @@ fn parse_object_identifier(contents: &[u8]) -> ASNResult {
             count += 1;
 
             if !has_next {
-                return Ok(sum)
+                return Ok(sum);
             }
         }
     }
 
     let mut reader = Reader::new(contents);
 
-    let mut items : Vec<u32> = Vec::new();
+    let mut items: Vec<u32> = Vec::new();
 
     let first_byte = reader.read_byte()?;
 
@@ -127,7 +128,6 @@ fn parse_object_identifier(contents: &[u8]) -> ASNResult {
 }
 
 fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
-
     let first_byte = reader.read_byte()?;
 
     let top_bit = first_byte & 0b10000000;
@@ -135,34 +135,32 @@ fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
 
     if top_bit == 0 {
         Ok(count_of_bytes)
-    }
-    else {
-
+    } else {
         if count_of_bytes == 0 {
             return Err(ASNError::UnsupportedIndefiniteLength);
         }
 
         if count_of_bytes == 127 {
-            return Err(ASNError::ReservedLengthValue)
+            return Err(ASNError::ReservedLengthValue);
         }
 
         if count_of_bytes < 1 || count_of_bytes > 4 {
-            return Err(ASNError::UnsupportedLengthByteCount(count_of_bytes))
+            return Err(ASNError::UnsupportedLengthByteCount(count_of_bytes));
         }
 
-        let mut value : usize = 0;
+        let mut value: usize = 0;
 
-        for _ in 0 .. count_of_bytes {
+        for _ in 0..count_of_bytes {
             value <<= 8;
             value |= reader.read_byte()? as usize;
         }
 
         if value == 0 {
-            return Err(ASNError::UnsupportedIndefiniteLength)
+            return Err(ASNError::UnsupportedIndefiniteLength);
         }
 
         if value < 128 {
-            return Err(ASNError::BadLengthEncoding(value)) // should have been encoded in single byte
+            return Err(ASNError::BadLengthEncoding(value)); // should have been encoded in single byte
         }
 
         Ok(value)
@@ -176,54 +174,58 @@ fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
         Some((asn_type, tag)) => {
             let contents = get_contents(reader)?;
             parse_content(&asn_type, tag, contents)
-        },
-        None => Err(ASNError::UnsupportedId(id))
+        }
+        None => Err(ASNError::UnsupportedId(id)),
     }
 }
 
 fn read_type(id: &Identifier) -> Option<(ASNTypeId, u8)> {
     match id {
-        Identifier{ class: TagClass::Universal, pc: PC::Primitive, tag} => {
-            match tag {
-                0x01 => Some((ASNTypeId::Boolean, *tag)),
-                0x02 => Some((ASNTypeId::Integer, *tag)),
-                0x03 => Some((ASNTypeId::BitString, *tag)),
-                0x04 => Some((ASNTypeId::OctetString, *tag)),
-                0x05 => Some((ASNTypeId::Null, *tag)),
-                0x06 => Some((ASNTypeId::ObjectIdentifier, *tag)),
-                0x0C => Some((ASNTypeId::UTF8String, *tag)),
-                0x13 => Some((ASNTypeId::PrintableString, *tag)),
-                0x16 => Some((ASNTypeId::IA5String, *tag)),
-                0x17 => Some((ASNTypeId::UTCTime, *tag)),
+        Identifier {
+            class: TagClass::Universal,
+            pc: PC::Primitive,
+            tag,
+        } => match tag {
+            0x01 => Some((ASNTypeId::Boolean, *tag)),
+            0x02 => Some((ASNTypeId::Integer, *tag)),
+            0x03 => Some((ASNTypeId::BitString, *tag)),
+            0x04 => Some((ASNTypeId::OctetString, *tag)),
+            0x05 => Some((ASNTypeId::Null, *tag)),
+            0x06 => Some((ASNTypeId::ObjectIdentifier, *tag)),
+            0x0C => Some((ASNTypeId::UTF8String, *tag)),
+            0x13 => Some((ASNTypeId::PrintableString, *tag)),
+            0x16 => Some((ASNTypeId::IA5String, *tag)),
+            0x17 => Some((ASNTypeId::UTCTime, *tag)),
 
-                _ => None
-            }
+            _ => None,
         },
-        Identifier{ class: TagClass::Universal, pc: PC::Constructed, tag} => {
-            match tag {
+        Identifier {
+            class: TagClass::Universal,
+            pc: PC::Constructed,
+            tag,
+        } => match tag {
+            0x10 => Some((ASNTypeId::Sequence, *tag)),
+            0x11 => Some((ASNTypeId::Set, *tag)),
 
-                0x10 => Some((ASNTypeId::Sequence, *tag)),
-                0x11 => Some((ASNTypeId::Set, *tag)),
-
-                _ => None
-            }
+            _ => None,
         },
 
-        Identifier{ class: TagClass::ContextSpecific, pc: _, tag} => {
-            Some((ASNTypeId::ExplicitTag, *tag))
-        },
+        Identifier {
+            class: TagClass::ContextSpecific,
+            pc: _,
+            tag,
+        } => Some((ASNTypeId::ExplicitTag, *tag)),
 
-        _ => None
+        _ => None,
     }
 }
 
-fn get_contents<'a>(reader: &mut Reader<'a>) -> Result<&'a[u8], ASNError> {
+fn get_contents<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], ASNError> {
     let length = parse_length(reader)?;
     Ok(reader.take(length)?)
 }
 
 fn parse_content<'a>(type_id: &ASNTypeId, tag: u8, contents: &'a [u8]) -> ASNResult<'a> {
-
     match type_id {
         ASNTypeId::Boolean => parse_boolean(contents),
         ASNTypeId::Integer => parse_integer(contents),
@@ -239,61 +241,73 @@ fn parse_content<'a>(type_id: &ASNTypeId, tag: u8, contents: &'a [u8]) -> ASNRes
         ASNTypeId::Sequence => parse_seq(contents),
         ASNTypeId::Set => parse_set(contents),
 
-        ASNTypeId::ExplicitTag => Ok(ExplicitTag::new(ASNExplicitTag::new(tag, contents)))
+        ASNTypeId::ExplicitTag => Ok(ExplicitTag::new(ASNExplicitTag::new(tag, contents))),
     }
 }
 
 pub struct Parser<'a> {
-    reader: Reader<'a>
+    reader: Reader<'a>,
 }
 
-
-
 impl<'a> Parser<'a> {
-
-    pub fn parse_all<'b, T: 'b>(input: &'b[u8], parse: fn(&mut Parser<'b>)-> Result<T, ASNError>) -> Result<T,ASNError> {
+    pub fn parse_all<'b, T: 'b>(
+        input: &'b [u8],
+        parse: fn(&mut Parser<'b>) -> Result<T, ASNError>,
+    ) -> Result<T, ASNError> {
         let mut parser = Parser::new(input);
         let value = parse(&mut parser)?;
         parser.expect_end()?;
         Ok(value)
     }
 
-    pub fn new(input: &'a[u8]) -> Parser {
-        Parser { reader: Reader::new(input) }
+    pub fn new(input: &'a [u8]) -> Parser {
+        Parser {
+            reader: Reader::new(input),
+        }
     }
 
-    pub fn unwrap_outer_sequence(input: &'a[u8]) -> Result<Parser, ASNError> {
+    pub fn unwrap_outer_sequence(input: &'a [u8]) -> Result<Parser, ASNError> {
         let mut parser = Parser::new(input);
         let bytes = parser.expect::<Sequence>()?;
         parser.expect_end()?;
         Ok(Parser::new(bytes))
     }
 
-    pub fn unwrap_outer_set(input: &'a[u8]) -> Result<Parser, ASNError> {
+    pub fn unwrap_outer_set(input: &'a [u8]) -> Result<Parser, ASNError> {
         let mut parser = Parser::new(input);
         let bytes = parser.expect::<Set>()?;
         parser.expect_end()?;
         Ok(Parser::new(bytes))
     }
 
-    pub fn get_explicitly_tagged_value_or_default<T : ASNWrapperType<'a>>(&mut self, tag: u8, default: T::Item) -> Result<T::Item, ASNError> {
+    pub fn get_explicitly_tagged_value_or_default<T: ASNWrapperType<'a>>(
+        &mut self,
+        tag: u8,
+        default: T::Item,
+    ) -> Result<T::Item, ASNError> {
         match self.get_optional_explicit_tag_value::<T>(tag)? {
             Some(item) => Ok(item),
-            None => Ok(default)
+            None => Ok(default),
         }
     }
 
-    pub fn get_optional_explicit_tag_value<T : ASNWrapperType<'a>>(&mut self, tag: u8) -> Result<Option<T::Item>, ASNError> {
+    pub fn get_optional_explicit_tag_value<T: ASNWrapperType<'a>>(
+        &mut self,
+        tag: u8,
+    ) -> Result<Option<T::Item>, ASNError> {
         match self.get_optional_explicit_tag(tag)? {
             Some(tag) => {
                 let mut parser = Parser::new(tag.contents);
                 Ok(Some(parser.expect::<T>()?))
-            },
-            None => Ok(None)
+            }
+            None => Ok(None),
         }
     }
 
-    pub fn get_optional_explicit_tag(&mut self, tag: u8) -> Result<Option<ASNExplicitTag<'a>>, ASNError> {
+    pub fn get_optional_explicit_tag(
+        &mut self,
+        tag: u8,
+    ) -> Result<Option<ASNExplicitTag<'a>>, ASNError> {
         if self.reader.is_empty() {
             return Ok(None);
         }
@@ -301,20 +315,25 @@ impl<'a> Parser<'a> {
         let id = Identifier::from(self.reader.peek_or_fail()?);
 
         match read_type(&id) {
-            Some((ASNTypeId::ExplicitTag, actual_tag)) if tag == actual_tag => Ok(Some(self.expect::<ExplicitTag>()?)),
+            Some((ASNTypeId::ExplicitTag, actual_tag)) if tag == actual_tag => {
+                Ok(Some(self.expect::<ExplicitTag>()?))
+            }
             Some(_) => Ok(None),
             None => Err(UnsupportedId(id)),
         }
     }
 
-    pub fn get_optional_or_default<T : ASNWrapperType<'a>>(&mut self, default: T::Item) -> Result<T::Item, ASNError> {
+    pub fn get_optional_or_default<T: ASNWrapperType<'a>>(
+        &mut self,
+        default: T::Item,
+    ) -> Result<T::Item, ASNError> {
         match self.get_optional::<T>()? {
             Some(value) => Ok(value),
             None => Ok(default),
         }
     }
 
-    pub fn get_optional<T : ASNWrapperType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
+    pub fn get_optional<T: ASNWrapperType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
         if self.reader.is_empty() {
             return Ok(None);
         }
@@ -328,16 +347,16 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_implicit<T : ASNWrapperType<'a>>(&mut self) -> Result<T::Item, ASNError> {
+    pub fn parse_implicit<T: ASNWrapperType<'a>>(&mut self) -> Result<T::Item, ASNError> {
         let result = match T::get_value(parse_content(&T::get_id(), 0, self.reader.remainder())?) {
             Some(value) => Ok(value),
-            None => panic!("Wrapper should have returned a {:?}!", T::get_id())
+            None => panic!("Wrapper should have returned a {:?}!", T::get_id()),
         };
         self.reader.clear();
         result
     }
 
-    pub fn expect<T : ASNWrapperType<'a>>(&mut self) -> Result<T::Item, ASNError> {
+    pub fn expect<T: ASNWrapperType<'a>>(&mut self) -> Result<T::Item, ASNError> {
         match self.expect_any() {
             Ok(asn_type) => {
                 let id = asn_type.get_id();
@@ -350,7 +369,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn expect_or_end<T : ASNWrapperType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
+    pub fn expect_or_end<T: ASNWrapperType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
         match self.expect::<T>() {
             Ok(value) => Ok(Some(value)),
             Err(ASNError::EndOfStream) => Ok(None),
@@ -362,7 +381,7 @@ impl<'a> Parser<'a> {
         match self.next() {
             Some(Ok(asn)) => Ok(asn),
             Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream)
+            None => Err(ASNError::EndOfStream),
         }
     }
 
@@ -370,7 +389,7 @@ impl<'a> Parser<'a> {
         match self.next() {
             Some(Ok(asn)) => Ok(Some(asn)),
             Some(Err(err)) => Err(err),
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -387,17 +406,16 @@ impl<'a> Iterator for Parser<'a> {
     type Item = Result<ASNType<'a>, ASNError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-
         if self.reader.is_empty() {
-            return None
+            return None;
         }
 
         match parse_one_type(&mut self.reader) {
             Err(e) => {
                 self.reader.clear();
                 Some(Err(e))
-            },
-            Ok(token) => Some(Ok(token))
+            }
+            Ok(token) => Some(Ok(token)),
         }
     }
 }
@@ -405,9 +423,12 @@ impl<'a> Iterator for Parser<'a> {
 #[cfg(test)]
 mod tests {
 
-    use reader::Reader;
     use parser::*;
-    use types::{ASNError, Identifier, TagClass, PC, ASNExplicitTag, Sequence, ExplicitTag, UtcTime, ObjectIdentifier, ASNObjectIdentifier};
+    use reader::Reader;
+    use types::{
+        ASNError, ASNExplicitTag, ASNObjectIdentifier, ExplicitTag, Identifier, ObjectIdentifier,
+        Sequence, TagClass, UtcTime, PC,
+    };
 
     const TOP_BIT: u8 = 1 << 7;
 
@@ -420,13 +441,19 @@ mod tests {
     #[test]
     fn detects_indefinite_length() {
         let mut reader = Reader::new(&[0x80]);
-        assert_eq!(parse_length(&mut reader), Err(ASNError::UnsupportedIndefiniteLength))
+        assert_eq!(
+            parse_length(&mut reader),
+            Err(ASNError::UnsupportedIndefiniteLength)
+        )
     }
 
     #[test]
     fn detects_reserved_length_of_127() {
         let mut reader = Reader::new(&[0xFF]);
-        assert_eq!(parse_length(&mut reader), Err(ASNError::ReservedLengthValue))
+        assert_eq!(
+            parse_length(&mut reader),
+            Err(ASNError::ReservedLengthValue)
+        )
     }
 
     #[test]
@@ -439,7 +466,10 @@ mod tests {
     #[test]
     fn decode_length_on_count_of_one_returns_none_if_value_less_than_128() {
         let mut reader = Reader::new(&[TOP_BIT | 1, 127]);
-        assert_eq!(parse_length(&mut reader), Err(ASNError::BadLengthEncoding(127)))
+        assert_eq!(
+            parse_length(&mut reader),
+            Err(ASNError::BadLengthEncoding(127))
+        )
     }
 
     #[test]
@@ -473,25 +503,45 @@ mod tests {
     #[test]
     fn decode_length_on_count_of_five_fails() {
         let mut reader = Reader::new(&[TOP_BIT | 5, 0x01, 0x02, 0x03, 0x04, 0x05]);
-        assert_eq!(parse_length(&mut reader), Err(ASNError::UnsupportedLengthByteCount(5)))
+        assert_eq!(
+            parse_length(&mut reader),
+            Err(ASNError::UnsupportedLengthByteCount(5))
+        )
     }
 
     #[test]
     fn parse_one_fails_for_non_universal_type() {
         let mut reader = Reader::new(&[0xFF]);
-        assert_eq!(parse_one_type(&mut reader), Err(ASNError::UnsupportedId(Identifier::new(TagClass::Private, PC::Constructed, 0x1F))))
+        assert_eq!(
+            parse_one_type(&mut reader),
+            Err(ASNError::UnsupportedId(Identifier::new(
+                TagClass::Private,
+                PC::Constructed,
+                0x1F
+            )))
+        )
     }
 
     #[test]
     fn parse_one_fails_for_unknown_universal_type() {
         let mut reader = Reader::new(&[0x1F, 0x00]);
-        assert_eq!(parse_one_type(&mut reader), Err(ASNError::UnsupportedId(Identifier::new(TagClass::Universal, PC::Primitive, 0x1F))))
+        assert_eq!(
+            parse_one_type(&mut reader),
+            Err(ASNError::UnsupportedId(Identifier::new(
+                TagClass::Universal,
+                PC::Primitive,
+                0x1F
+            )))
+        )
     }
 
     #[test]
     fn parses_sequence_correctly() {
         let mut reader = Reader::new(&[0x30, 0x03, 0x02, 0x03, 0x04, 0x05, 0x06]);
-        assert_eq!(parse_one_type(&mut reader), Ok(Sequence::new(&[0x02, 0x03, 0x04])));
+        assert_eq!(
+            parse_one_type(&mut reader),
+            Ok(Sequence::new(&[0x02, 0x03, 0x04]))
+        );
         assert_eq!(reader.remainder(), &[0x05, 0x06]);
     }
 
@@ -504,7 +554,10 @@ mod tests {
     #[test]
     fn parses_explicit_tag() {
         let mut reader = Reader::new(&[0xA1, 0x02, 0xCA, 0xFE]);
-        assert_eq!(parse_one_type(&mut reader), Ok(ExplicitTag::new(ASNExplicitTag::new(1, &[0xCA, 0xFE]))));
+        assert_eq!(
+            parse_one_type(&mut reader),
+            Ok(ExplicitTag::new(ASNExplicitTag::new(1, &[0xCA, 0xFE])))
+        );
     }
 
     #[test]
@@ -519,12 +572,10 @@ mod tests {
         fn test_variant(value: &str, seconds: u32) {
             assert_eq!(
                 parse_utc_time(value.as_bytes()),
-                Ok(UtcTime::new(
-                    chrono::DateTime::from_utc(
-                        chrono::NaiveDate::from_ymd(1999, 01, 02).and_hms(5, 23, seconds),
-                        chrono::FixedOffset::east(0)
-                    )
-                ))
+                Ok(UtcTime::new(chrono::DateTime::from_utc(
+                    chrono::NaiveDate::from_ymd(1999, 01, 02).and_hms(5, 23, seconds),
+                    chrono::FixedOffset::east(0)
+                )))
             );
         }
 
@@ -544,13 +595,17 @@ mod tests {
         // Microsoft: szOID_REQUEST_CLIENT_INFO
         assert_eq!(
             parse_object_identifier(&[0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x15, 0x14]),
-            Ok(ObjectIdentifier::new(ASNObjectIdentifier::new([1, 3, 6, 1, 4, 1, 311, 21, 20].to_vec())))
+            Ok(ObjectIdentifier::new(ASNObjectIdentifier::new(
+                [1, 3, 6, 1, 4, 1, 311, 21, 20].to_vec()
+            )))
         );
 
         // sha1WithRSAEncryption
         assert_eq!(
             parse_object_identifier(&[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x05]),
-            Ok(ObjectIdentifier::new(ASNObjectIdentifier::new([1, 2, 840, 113549, 1, 1, 5].to_vec())))
+            Ok(ObjectIdentifier::new(ASNObjectIdentifier::new(
+                [1, 2, 840, 113549, 1, 1, 5].to_vec()
+            )))
         );
     }
 }

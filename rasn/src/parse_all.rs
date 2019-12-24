@@ -1,5 +1,5 @@
-use types::{ASNType, ASNError};
 use parser::Parser;
+use types::{ASNError, ASNType};
 
 pub trait ParseHandler {
     fn begin_constructed(&mut self) -> ();
@@ -13,8 +13,8 @@ pub fn parse_all(input: &[u8], handler: &mut dyn ParseHandler) -> Result<(), ASN
         match result {
             Err(err) => {
                 handler.on_error(&err);
-                return Err(err)
-            },
+                return Err(err);
+            }
             Ok(asn) => {
                 handler.on_type(&asn);
                 match asn {
@@ -33,7 +33,7 @@ pub fn parse_all(input: &[u8], handler: &mut dyn ParseHandler) -> Result<(), ASN
                         parse_all(wrapper.value, handler)?;
                         handler.end_constructed();
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
         }
@@ -46,7 +46,7 @@ pub fn parse_all(input: &[u8], handler: &mut dyn ParseHandler) -> Result<(), ASN
 mod tests {
 
     use parse_all::{parse_all, ParseHandler};
-    use types::{ASNType, ASNError};
+    use types::{ASNError, ASNType};
 
     struct MockHandler {}
 
@@ -63,12 +63,20 @@ mod tests {
     #[test]
     fn parses_rsa_x509_without_error() {
         // just checking that an error doesn't occur
-        parse_all(include_bytes!("../../x509/512b-rsa-example-cert.der"), &mut MockHandler {}).unwrap();
+        parse_all(
+            include_bytes!("../../x509/512b-rsa-example-cert.der"),
+            &mut MockHandler {},
+        )
+        .unwrap();
     }
 
     #[test]
     fn parses_ed22519_x509_without_error() {
         // just checking that an error doesn't occur
-        parse_all(include_bytes!("../../x509/ed25519-example-cert.der"), &mut MockHandler {}).unwrap();
+        parse_all(
+            include_bytes!("../../x509/ed25519-example-cert.der"),
+            &mut MockHandler {},
+        )
+        .unwrap();
     }
 }

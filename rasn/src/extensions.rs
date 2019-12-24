@@ -1,7 +1,10 @@
-use types::{ASNObjectIdentifier, ASNError, ObjectIdentifier, Boolean, OctetString, BitString, ExplicitTag, IA5String, Integer};
 use parser::Parser;
-use printer::{Printable, LinePrinter, print_type};
+use printer::{print_type, LinePrinter, Printable};
 use std::fmt::Debug;
+use types::{
+    ASNError, ASNObjectIdentifier, BitString, Boolean, ExplicitTag, IA5String, Integer,
+    ObjectIdentifier, OctetString,
+};
 
 #[derive(Debug)]
 pub struct Extension<'a> {
@@ -11,12 +14,19 @@ pub struct Extension<'a> {
 }
 
 impl<'a> Extension<'a> {
-    pub fn new(extn_id: ASNObjectIdentifier, critical: bool, content: Box<dyn SpecificExtension + 'a>) -> Extension<'a> {
-        Extension { extn_id, critical, content }
+    pub fn new(
+        extn_id: ASNObjectIdentifier,
+        critical: bool,
+        content: Box<dyn SpecificExtension + 'a>,
+    ) -> Extension<'a> {
+        Extension {
+            extn_id,
+            critical,
+            content,
+        }
     }
 
     pub fn parse(input: &'a [u8]) -> Result<Extension, ASNError> {
-
         Parser::parse_all(input, |parser| {
             let oid = parser.expect::<ObjectIdentifier>()?;
             let is_critical = parser.get_optional_or_default::<Boolean>(false)?;
@@ -33,12 +43,11 @@ impl<'a> Extension<'a> {
 
             Ok(Extension::new(oid, is_critical, content))
         })
-
     }
 }
 
 impl<'a> Printable for Extension<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         printer.begin_line();
         printer.println_str(self.content.get_name());
         printer.begin_type();
@@ -51,13 +60,13 @@ impl<'a> Printable for Extension<'a> {
     }
 }
 
-pub trait SpecificExtension : Debug + Printable {
+pub trait SpecificExtension: Debug + Printable {
     fn get_name(&self) -> &'static str;
 }
 
 #[derive(Debug)]
 pub struct UnknownExtension<'a> {
-    pub extn_value: &'a[u8],
+    pub extn_value: &'a [u8],
 }
 
 impl<'a> SpecificExtension for UnknownExtension<'a> {
@@ -67,20 +76,20 @@ impl<'a> SpecificExtension for UnknownExtension<'a> {
 }
 
 impl<'a> UnknownExtension<'a> {
-    fn new(extn_value: &'a[u8]) -> UnknownExtension<'a> {
+    fn new(extn_value: &'a [u8]) -> UnknownExtension<'a> {
         UnknownExtension { extn_value }
     }
 }
 
 impl<'a> Printable for UnknownExtension<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         print_type("raw content", &self.extn_value, printer);
     }
 }
 
 #[derive(Debug)]
 pub struct SubjectKeyIdentifier<'a> {
-    pub key_identifier: &'a [u8]
+    pub key_identifier: &'a [u8],
 }
 
 impl<'a> SpecificExtension for SubjectKeyIdentifier<'a> {
@@ -93,12 +102,12 @@ impl<'a> SubjectKeyIdentifier<'a> {
     fn parse(input: &[u8]) -> Result<SubjectKeyIdentifier, ASNError> {
         let mut parser = Parser::new(input);
         let key_identifier = parser.expect::<OctetString>()?;
-        Ok(SubjectKeyIdentifier{key_identifier})
+        Ok(SubjectKeyIdentifier { key_identifier })
     }
 }
 
 impl<'a> Printable for SubjectKeyIdentifier<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         print_type("key identifier", &self.key_identifier, printer);
     }
 }
@@ -159,8 +168,8 @@ impl KeyUsage {
 }
 
 impl Printable for KeyUsage {
-    fn print(&self, printer: &mut LinePrinter) -> () {
-        fn print_usage(description: &str, printer: &mut LinePrinter) {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+        fn print_usage(description: &str, printer: &mut dyn LinePrinter) {
             printer.begin_type();
             printer.begin_line();
             printer.println_str(description);
@@ -170,15 +179,33 @@ impl Printable for KeyUsage {
         printer.begin_line();
         printer.println_str("usages:");
 
-        if self.digital_signature { print_usage("digital signature", printer) }
-        if self.content_commitment { print_usage("content commitment", printer) }
-        if self.key_encipherment { print_usage("key encipherment", printer) }
-        if self.data_encipherment { print_usage("data encipherment", printer) }
-        if self.key_agreement { print_usage("key agreement", printer) }
-        if self.key_cert_sign { print_usage("key cert sign", printer) }
-        if self.crl_sign { print_usage("crl sign", printer) }
-        if self.encipher_only { print_usage("encipher only", printer) }
-        if self.decipher_only { print_usage("decipher only", printer) }
+        if self.digital_signature {
+            print_usage("digital signature", printer)
+        }
+        if self.content_commitment {
+            print_usage("content commitment", printer)
+        }
+        if self.key_encipherment {
+            print_usage("key encipherment", printer)
+        }
+        if self.data_encipherment {
+            print_usage("data encipherment", printer)
+        }
+        if self.key_agreement {
+            print_usage("key agreement", printer)
+        }
+        if self.key_cert_sign {
+            print_usage("key cert sign", printer)
+        }
+        if self.crl_sign {
+            print_usage("crl sign", printer)
+        }
+        if self.encipher_only {
+            print_usage("encipher only", printer)
+        }
+        if self.decipher_only {
+            print_usage("decipher only", printer)
+        }
     }
 }
 
@@ -196,13 +223,21 @@ pub enum GeneralName<'a> {
 }
 
 impl<'a> Printable for GeneralName<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         match self {
-            GeneralName::Rfc822Name(value) => printer.println_fmt(&format_args!("RFC822 Name: {}", value)),
-            GeneralName::DnsName(value) => printer.println_fmt(&format_args!("DNS Name: {}", value)),
-            GeneralName::UniformResourceIdentifier(value) => printer.println_fmt(&format_args!("Uniform Resource Identifier: {}", value)),
+            GeneralName::Rfc822Name(value) => {
+                printer.println_fmt(&format_args!("RFC822 Name: {}", value))
+            }
+            GeneralName::DnsName(value) => {
+                printer.println_fmt(&format_args!("DNS Name: {}", value))
+            }
+            GeneralName::UniformResourceIdentifier(value) => {
+                printer.println_fmt(&format_args!("Uniform Resource Identifier: {}", value))
+            }
             GeneralName::IpAddress(value) => print_type("IP Address", value, printer),
-            GeneralName::RegisteredId(value) => printer.println_fmt(&format_args!("Registered ID: {}", value)),
+            GeneralName::RegisteredId(value) => {
+                printer.println_fmt(&format_args!("Registered ID: {}", value))
+            }
             _ => printer.println_str("Unsupported name type"),
         }
     }
@@ -228,22 +263,30 @@ impl<'a> SubjectAlternativeName<'a> {
             let mut parser = Parser::new(tag.contents);
             match tag.value {
                 // TODO: parse the other types
-                1 => names.push(GeneralName::Rfc822Name(parser.parse_implicit::<IA5String>()?)),
+                1 => names.push(GeneralName::Rfc822Name(
+                    parser.parse_implicit::<IA5String>()?,
+                )),
                 2 => names.push(GeneralName::DnsName(parser.parse_implicit::<IA5String>()?)),
-                6 => names.push(GeneralName::UniformResourceIdentifier(parser.parse_implicit::<IA5String>()?)),
-                7 => names.push(GeneralName::IpAddress(parser.parse_implicit::<OctetString>()?)),
-                8 => names.push(GeneralName::RegisteredId(parser.parse_implicit::<ObjectIdentifier>()?)),
+                6 => names.push(GeneralName::UniformResourceIdentifier(
+                    parser.parse_implicit::<IA5String>()?,
+                )),
+                7 => names.push(GeneralName::IpAddress(
+                    parser.parse_implicit::<OctetString>()?,
+                )),
+                8 => names.push(GeneralName::RegisteredId(
+                    parser.parse_implicit::<ObjectIdentifier>()?,
+                )),
 
-                _ => return Err(ASNError::UnexpectedTag(tag.value))
+                _ => return Err(ASNError::UnexpectedTag(tag.value)),
             };
-        };
+        }
 
-        Ok(SubjectAlternativeName{names})
+        Ok(SubjectAlternativeName { names })
     }
 }
 
 impl<'a> Printable for SubjectAlternativeName<'a> {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         printer.begin_line();
         printer.println_str("names:");
         printer.begin_type();
@@ -275,24 +318,27 @@ impl BasicConstraints {
         let constraint = match constraint {
             Some(value) => match value.as_i32() {
                 Some(value) => Ok(Some(value)),
-                None => Err(ASNError::IntegerTooLarge(value.bytes.len()))
-            }
-            None => Ok(None)
+                None => Err(ASNError::IntegerTooLarge(value.bytes.len())),
+            },
+            None => Ok(None),
         }?;
 
-        Ok(BasicConstraints{ca, path_length_constraint: constraint})
+        Ok(BasicConstraints {
+            ca,
+            path_length_constraint: constraint,
+        })
     }
 }
 
 impl Printable for BasicConstraints {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         printer.begin_line();
         printer.println_fmt(&format_args!("CA: {}", self.ca));
         match self.path_length_constraint {
             Some(constraint) => {
                 printer.begin_line();
                 printer.println_fmt(&format_args!("Path Length Contraint: {}", constraint));
-            },
+            }
             None => {}
         }
     }
@@ -317,7 +363,7 @@ impl ExtendedKeyUsagePurpose {
             [1, 3, 6, 1, 5, 5, 7, 3, 4] => Some(ExtendedKeyUsagePurpose::EmailProtection),
             [1, 3, 6, 1, 5, 5, 7, 3, 8] => Some(ExtendedKeyUsagePurpose::TimeStamping),
             [1, 3, 6, 1, 5, 5, 7, 3, 9] => Some(ExtendedKeyUsagePurpose::OCSPSigning),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -343,14 +389,16 @@ impl ExtendedKeyUsage {
                 Some(purpose) => purposes.push(purpose),
                 None => return Err(ASNError::UnexpectedOid(oid)),
             }
-        };
+        }
 
-        Ok(ExtendedKeyUsage{ ext_key_usages: purposes })
+        Ok(ExtendedKeyUsage {
+            ext_key_usages: purposes,
+        })
     }
 }
 
 impl Printable for ExtendedKeyUsage {
-    fn print(&self, printer: &mut LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) -> () {
         printer.begin_line();
         printer.println_str("usages:");
         printer.begin_type();
