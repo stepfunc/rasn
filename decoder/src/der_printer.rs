@@ -6,7 +6,7 @@ pub struct ParsePrinter {
 }
 
 impl ParsePrinter {
-    fn print_indent(&self) -> () {
+    fn print_indent(&self) {
         for _ in 0..self.indent {
             print!("  ");
         }
@@ -18,15 +18,15 @@ impl ParsePrinter {
 }
 
 impl ParseHandler for ParsePrinter {
-    fn begin_constructed(&mut self) -> () {
+    fn begin_constructed(&mut self) {
         self.indent += 1;
     }
 
-    fn end_constructed(&mut self) -> () {
+    fn end_constructed(&mut self) {
         self.indent -= 1;
     }
 
-    fn on_type(&mut self, asn: &ASNType) -> () {
+    fn on_type(&mut self, asn: &ASNType) {
         self.print_indent();
         println!("{}", asn);
         match asn {
@@ -53,7 +53,7 @@ impl ParseHandler for ParsePrinter {
         }
     }
 
-    fn on_error(&mut self, err: &ASNError) -> () {
+    fn on_error(&mut self, err: &ASNError) {
         println!("Error: {:?}", err);
     }
 }

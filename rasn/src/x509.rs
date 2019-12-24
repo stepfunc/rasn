@@ -27,7 +27,7 @@ pub struct Certificate<'a> {
 }
 
 impl<'a> Printable for Certificate<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         print_type("tbs certificate", &self.tbs_certificate.value, printer);
         print_type("signature algorithm", &self.signature_algorithm, printer);
         print_type("signature value", &self.signature_value, printer);
@@ -35,7 +35,7 @@ impl<'a> Printable for Certificate<'a> {
 }
 
 impl<'a> Printable for &'a [u8] {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         for chunk in self.chunks(16) {
             printer.begin_line();
             if let Some((last, first)) = chunk.split_last() {
@@ -49,7 +49,7 @@ impl<'a> Printable for &'a [u8] {
 }
 
 impl<'a> Printable for ASNBitString<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         if let Some(octets) = self.octets() {
             octets.print(printer);
         }
@@ -63,7 +63,7 @@ pub struct AlgorithmIdentifier<'a> {
 }
 
 impl<'a> Printable for AlgorithmIdentifier<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
         printer.println_fmt(&format_args!("algorithm: {}", self.algorithm));
     }
@@ -91,7 +91,7 @@ pub struct TBSCertificate<'a> {
 }
 
 impl<'a> Printable for TBSCertificate<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
         printer.println_fmt(&format_args!("version: {:?}", self.version));
 
@@ -154,7 +154,7 @@ impl Validity {
 }
 
 impl Printable for Validity {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
         printer.println_fmt(&format_args!("not before: {}", self.not_before));
 
@@ -185,7 +185,7 @@ impl<'a> AttributeTypeAndValue<'a> {
 }
 
 impl<'a> Printable for AttributeTypeAndValue<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
         printer.println_fmt(&format_args!("id: {}", self.id));
         printer.begin_line();
@@ -243,7 +243,7 @@ impl<'a> Name<'a> {
 }
 
 impl<'a> Printable for Name<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         for rdn in &self.values {
             for attr in &rdn.values {
                 printer.begin_type();
@@ -282,7 +282,7 @@ impl<'a> SubjectPublicKeyInfo<'a> {
 }
 
 impl<'a> Printable for SubjectPublicKeyInfo<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         print_type("algorithm", &self.algorithm, printer);
         print_type("subject public key", &self.subject_public_key, printer);
     }

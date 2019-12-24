@@ -10,7 +10,7 @@ impl<'a> Reader<'a> {
         Reader { bytes }
     }
 
-    pub fn clear(&mut self) -> () {
+    pub fn clear(&mut self) {
         self.bytes = &[];
     }
 

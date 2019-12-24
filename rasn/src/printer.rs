@@ -12,7 +12,7 @@ pub trait LinePrinter {
 }
 
 pub trait Printable {
-    fn print(&self, printer: &mut dyn LinePrinter) -> ();
+    fn print(&self, printer: &mut dyn LinePrinter);
 }
 
 pub fn print_type(name: &str, printable: &dyn Printable, printer: &mut dyn LinePrinter) {
@@ -64,7 +64,7 @@ impl LinePrinter for ConsoleLinePrinter {
         println!("{}", line)
     }
 
-    fn end_type(&mut self) -> () {
+    fn end_type(&mut self) {
         self.indent -= 1;
     }
 }

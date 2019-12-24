@@ -47,7 +47,7 @@ impl<'a> Extension<'a> {
 }
 
 impl<'a> Printable for Extension<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
         printer.println_str(self.content.get_name());
         printer.begin_type();
@@ -82,7 +82,7 @@ impl<'a> UnknownExtension<'a> {
 }
 
 impl<'a> Printable for UnknownExtension<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         print_type("raw content", &self.extn_value, printer);
     }
 }
@@ -107,7 +107,7 @@ impl<'a> SubjectKeyIdentifier<'a> {
 }
 
 impl<'a> Printable for SubjectKeyIdentifier<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         print_type("key identifier", &self.key_identifier, printer);
     }
 }
@@ -168,7 +168,7 @@ impl KeyUsage {
 }
 
 impl Printable for KeyUsage {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         fn print_usage(description: &str, printer: &mut dyn LinePrinter) {
             printer.begin_type();
             printer.begin_line();
@@ -223,7 +223,7 @@ pub enum GeneralName<'a> {
 }
 
 impl<'a> Printable for GeneralName<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         match self {
             GeneralName::Rfc822Name(value) => {
                 printer.println_fmt(&format_args!("RFC822 Name: {}", value))
@@ -286,7 +286,7 @@ impl<'a> SubjectAlternativeName<'a> {
 }
 
 impl<'a> Printable for SubjectAlternativeName<'a> {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
         printer.println_str("names:");
         printer.begin_type();
@@ -331,7 +331,7 @@ impl BasicConstraints {
 }
 
 impl Printable for BasicConstraints {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
         printer.println_fmt(&format_args!("CA: {}", self.ca));
         match self.path_length_constraint {
@@ -398,7 +398,7 @@ impl ExtendedKeyUsage {
 }
 
 impl Printable for ExtendedKeyUsage {
-    fn print(&self, printer: &mut dyn LinePrinter) -> () {
+    fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
         printer.println_str("usages:");
         printer.begin_type();

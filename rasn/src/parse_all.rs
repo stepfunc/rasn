@@ -2,10 +2,10 @@ use parser::Parser;
 use types::{ASNError, ASNType};
 
 pub trait ParseHandler {
-    fn begin_constructed(&mut self) -> ();
-    fn end_constructed(&mut self) -> ();
-    fn on_type(&mut self, asn: &ASNType) -> ();
-    fn on_error(&mut self, err: &ASNError) -> ();
+    fn begin_constructed(&mut self);
+    fn end_constructed(&mut self);
+    fn on_type(&mut self, asn: &ASNType);
+    fn on_error(&mut self, err: &ASNError);
 }
 
 pub fn parse_all(input: &[u8], handler: &mut dyn ParseHandler) -> Result<(), ASNError> {
@@ -51,13 +51,13 @@ mod tests {
     struct MockHandler {}
 
     impl ParseHandler for MockHandler {
-        fn begin_constructed(&mut self) -> () {}
+        fn begin_constructed(&mut self) {}
 
-        fn end_constructed(&mut self) -> () {}
+        fn end_constructed(&mut self) {}
 
-        fn on_type(&mut self, _: &ASNType) -> () {}
+        fn on_type(&mut self, _: &ASNType) {}
 
-        fn on_error(&mut self, _: &ASNError) -> () {}
+        fn on_error(&mut self, _: &ASNError) {}
     }
 
     #[test]
