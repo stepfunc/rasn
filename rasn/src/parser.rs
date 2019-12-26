@@ -391,7 +391,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect_end(&mut self) -> Result<(), ASNError> {
+    pub fn expect_end(&mut self) -> Result<(), ASNError> {
         match self.next() {
             None => Ok(()),
             Some(Err(err)) => Err(err),
