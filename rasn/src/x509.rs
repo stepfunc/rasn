@@ -291,9 +291,7 @@ impl<'a> Printable for SubjectPublicKeyInfo<'a> {
 impl<'a> Certificate<'a> {
     pub fn parse(input: &[u8]) -> Result<Certificate, ASNError> {
         Parser::parse_all(input, |p1| {
-            let outer = p1.expect::<Sequence>()?;
-            p1.expect_end()?;
-            Parser::parse_all(outer, |p2| {
+            Parser::parse_all(p1.expect::<Sequence>()?, |p2| {
                 Ok(Certificate::new(
                     TBSCertificate::parse(p2.expect::<Sequence>()?)?,
                     AlgorithmIdentifier::parse(p2.expect::<Sequence>()?)?,
