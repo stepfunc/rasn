@@ -1,8 +1,5 @@
-extern crate chrono;
-
-use chrono::{DateTime, FixedOffset};
-use oid::get_oid;
-use reader;
+use crate::oid::get_oid;
+use crate::reader;
 use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
@@ -50,7 +47,7 @@ impl Identifier {
             PC::Primitive
         };
 
-        let tag = byte & 0b000_11111;
+        let tag = byte & 0b001_1111;
 
         Identifier::new(class, pc, tag)
     }
@@ -123,7 +120,7 @@ impl<'a> ASNBitString<'a> {
     }
 
     pub fn iter(&'a self) -> ASNBitStringIterator<'a> {
-        ASNBitStringIterator::new(&self)
+        ASNBitStringIterator::new(self)
     }
 }
 
@@ -451,17 +448,29 @@ impl<'a> ASNWrapperType<'a> for BitString<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+/// UTC time stored as an u64 count of non-leap seconds since UNIX Epoch.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct UtcTime {
-    pub value: DateTime<FixedOffset>,
+    pub value: u64,
 }
 impl UtcTime {
-    pub fn asn<'a>(value: DateTime<FixedOffset>) -> ASNType<'a> {
+    pub fn asn<'a>(value: u64) -> ASNType<'a> {
         ASNType::UTCTime(UtcTime { value })
+    }
+
+    pub fn from_seconds_since_epoch(secs: u64) -> Self {
+        Self { value: secs }
+    }
+
+    pub fn now() -> Result<Self, ASNError> {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| Self::from_seconds_since_epoch(duration.as_secs()))
+            .map_err(|_| ASNError::BadUTCTime)
     }
 }
 impl<'a> ASNWrapperType<'a> for UtcTime {
-    type Item = DateTime<FixedOffset>;
+    type Item = UtcTime;
 
     fn get_id() -> ASNTypeId {
         ASNTypeId::UTCTime
@@ -469,7 +478,7 @@ impl<'a> ASNWrapperType<'a> for UtcTime {
 
     fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item> {
         match asn_type {
-            ASNType::UTCTime(wrapper) => Some(wrapper.value),
+            ASNType::UTCTime(wrapper) => Some(wrapper),
             _ => None,
         }
     }
@@ -510,6 +519,7 @@ pub enum ASNType<'a> {
     UTF8String(UTF8String<'a>),
     Null,
     UTCTime(UtcTime),
+    GeneralizedTime(UtcTime),
     BitString(BitString<'a>),
     OctetString(OctetString<'a>),
     ObjectIdentifier(ObjectIdentifier),
@@ -529,6 +539,7 @@ pub enum ASNTypeId {
     UTF8String,
     Null,
     UTCTime,
+    GeneralizedTime,
     BitString,
     OctetString,
     ObjectIdentifier,
@@ -547,6 +558,7 @@ impl<'a> ASNType<'a> {
             ASNType::UTF8String(_) => ASNTypeId::UTF8String,
             ASNType::Null => ASNTypeId::Null,
             ASNType::UTCTime(_) => ASNTypeId::UTCTime,
+            ASNType::GeneralizedTime(_) => ASNTypeId::GeneralizedTime,
             ASNType::BitString(_) => ASNTypeId::BitString,
             ASNType::OctetString(_) => ASNTypeId::OctetString,
             ASNType::ObjectIdentifier(_) => ASNTypeId::ObjectIdentifier,
@@ -577,6 +589,7 @@ impl<'a> std::fmt::Display for ASNType<'a> {
             ASNType::Null => f.write_str("Null"),
             ASNType::ObjectIdentifier(wrapper) => write!(f, "ObjectIdentifier: {}", wrapper.value),
             ASNType::UTCTime(wrapper) => write!(f, "UTCTime: {}", wrapper.value),
+            ASNType::GeneralizedTime(wrapper) => write!(f, "GeneratlizedTime: {}", wrapper.value),
             ASNType::BitString(_) => f.write_str("BitString"),
             ASNType::OctetString(_) => f.write_str("OctetString"),
             ASNType::ExplicitTag(wrapper) => write!(f, "[{}]", wrapper.value.value),
@@ -599,7 +612,7 @@ pub enum ASNError {
     BadLengthEncoding(u8, usize), // count of bytes followed by the value
     BadOidLength,
     BadUTF8(std::str::Utf8Error),
-    BadUTCTime(chrono::format::ParseError),
+    BadUTCTime,
     BitStringUnusedBitsTooLarge(u8),
     // these errors relate to schemas
     UnexpectedType(ASNTypeId, ASNTypeId), // the expected type followed by the actual type
@@ -644,7 +657,7 @@ impl std::fmt::Display for ASNError {
             }
             ASNError::BadOidLength => f.write_str("Bad OID length"),
             ASNError::BadUTF8(err) => write!(f, "Bad UTF8 encoding: {}", err),
-            ASNError::BadUTCTime(err) => write!(f, "Bad UTC time string: {}", err),
+            ASNError::BadUTCTime => write!(f, "Bad UTC time string"),
             ASNError::BitStringUnusedBitsTooLarge(unused) => write!(
                 f,
                 "Bit string w/ unused bits outside range [0..7]: {}",

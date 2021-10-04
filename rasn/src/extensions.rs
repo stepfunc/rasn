@@ -1,10 +1,30 @@
-use parser::Parser;
-use printer::{print_type, LinePrinter, Printable};
-use std::fmt::Debug;
-use types::{
+use crate::parser::Parser;
+use crate::printer::{print_type, LinePrinter, Printable};
+use crate::types::{
     ASNError, ASNObjectIdentifier, BitString, Boolean, ExplicitTag, IA5String, Integer,
-    ObjectIdentifier, OctetString,
+    ObjectIdentifier, OctetString, Sequence,
 };
+use std::fmt::Debug;
+
+#[derive(Debug)]
+pub struct Extensions<'a> {
+    raw_content: &'a [u8],
+}
+
+impl<'a> Extensions<'a> {
+    pub(crate) fn new(raw_content: &'a [u8]) -> Self {
+        Self { raw_content }
+    }
+
+    pub fn parse(&'a self) -> Result<Vec<Extension<'a>>, ASNError> {
+        let mut extensions: Vec<Extension> = Vec::new();
+        let mut parser = Parser::unwrap_outer_sequence(self.raw_content)?;
+        while let Some(seq) = parser.expect_or_end::<Sequence>()? {
+            extensions.push(Extension::parse(seq)?);
+        }
+        Ok(extensions)
+    }
+}
 
 #[derive(Debug)]
 pub struct Extension<'a> {

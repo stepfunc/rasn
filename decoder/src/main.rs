@@ -1,5 +1,3 @@
-extern crate rasn;
-
 mod der_printer;
 
 use std::env;

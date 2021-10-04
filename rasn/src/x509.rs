@@ -1,7 +1,7 @@
-use extensions::Extension;
-use parser::Parser;
-use printer::{print_type, LinePrinter, Printable};
-use types::{
+use crate::extensions::Extensions;
+use crate::parser::Parser;
+use crate::printer::{print_type, LinePrinter, Printable};
+use crate::types::{
     ASNBitString, ASNError, ASNInteger, ASNObjectIdentifier, ASNType, BitString, Integer,
     ObjectIdentifier, Sequence, Set, UtcTime,
 };
@@ -87,7 +87,7 @@ pub struct TBSCertificate<'a> {
     pub subject_public_key_info: SubjectPublicKeyInfo<'a>,
     pub issuer_unique_id: Option<ASNBitString<'a>>,
     pub subject_unique_id: Option<ASNBitString<'a>>,
-    pub extensions: Vec<Extension<'a>>,
+    pub extensions: Option<Extensions<'a>>,
 }
 
 impl<'a> Printable for TBSCertificate<'a> {
@@ -114,29 +114,36 @@ impl<'a> Printable for TBSCertificate<'a> {
             print_type("subject unique ID", subject_unique_id, printer);
         }
 
-        if !self.extensions.is_empty() {
-            printer.begin_line();
-            printer.println_str("Extensions");
+        if let Some(extensions) = &self.extensions {
+            match extensions.parse() {
+                Ok(extensions) => {
+                    if !extensions.is_empty() {
+                        printer.begin_line();
+                        printer.println_str("Extensions");
 
-            printer.begin_type();
-            for extension in &self.extensions {
-                extension.print(printer);
+                        printer.begin_type();
+                        for extension in &extensions {
+                            extension.print(printer);
+                        }
+                        printer.end_type();
+                    }
+                }
+                Err(err) => {
+                    printer.println_fmt(&format_args!("**Error** parsing extensions: {}", err));
+                }
             }
-            printer.end_type();
         }
     }
 }
 
-type Time = chrono::DateTime<chrono::FixedOffset>;
-
 #[derive(Debug)]
 pub struct Validity {
-    pub not_before: Time,
-    pub not_after: Time,
+    pub not_before: UtcTime,
+    pub not_after: UtcTime,
 }
 
 impl Validity {
-    fn new(not_before: Time, not_after: Time) -> Validity {
+    fn new(not_before: UtcTime, not_after: UtcTime) -> Validity {
         Validity {
             not_before,
             not_after,
@@ -151,15 +158,19 @@ impl Validity {
             ))
         })
     }
+
+    pub fn is_valid(&self, now: UtcTime) -> bool {
+        now >= self.not_before && now <= self.not_after
+    }
 }
 
 impl Printable for Validity {
     fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
-        printer.println_fmt(&format_args!("not before: {}", self.not_before));
+        printer.println_fmt(&format_args!("not before: {}", self.not_before.value));
 
         printer.begin_line();
-        printer.println_fmt(&format_args!("not after: {}", self.not_after));
+        printer.println_fmt(&format_args!("not after: {}", self.not_after.value));
     }
 }
 
@@ -206,10 +217,8 @@ impl<'a> RelativeDistinguishedName<'a> {
     fn parse(input: &'a [u8]) -> Result<RelativeDistinguishedName<'a>, ASNError> {
         let mut parser = Parser::new(input);
 
-        let mut entries: Vec<AttributeTypeAndValue> = Vec::new();
-
         // expect at least one entry!
-        entries.push(AttributeTypeAndValue::parse(parser.expect::<Sequence>()?)?);
+        let mut entries = vec![AttributeTypeAndValue::parse(parser.expect::<Sequence>()?)?];
 
         while let Some(seq) = parser.expect_or_end::<Sequence>()? {
             entries.push(AttributeTypeAndValue::parse(seq)?);
@@ -345,7 +354,7 @@ impl<'a> TBSCertificate<'a> {
         subject_public_key_info: SubjectPublicKeyInfo<'a>,
         issuer_unique_id: Option<ASNBitString<'a>>,
         subject_unique_id: Option<ASNBitString<'a>>,
-        extensions: Vec<Extension<'a>>,
+        extensions: Option<Extensions<'a>>,
     ) -> TBSCertificate<'a> {
         TBSCertificate {
             version,
@@ -388,16 +397,15 @@ impl<'a> TBSCertificate<'a> {
             }
         }
 
-        fn parse_extensions<'a>(parser: &mut Parser<'a>) -> Result<Vec<Extension<'a>>, ASNError> {
+        fn parse_extensions<'a>(
+            parser: &mut Parser<'a>,
+        ) -> Result<Option<Extensions<'a>>, ASNError> {
             // TODO: check minimum version
-            let mut extensions: Vec<Extension> = Vec::new();
             if let Some(tag) = parser.get_optional_explicit_tag(3)? {
-                let mut parser = Parser::unwrap_outer_sequence(tag.contents)?;
-                while let Some(seq) = parser.expect_or_end::<Sequence>()? {
-                    extensions.push(Extension::parse(seq)?);
-                }
-            };
-            Ok(extensions)
+                Ok(Some(Extensions::new(tag.contents)))
+            } else {
+                Ok(None)
+            }
         }
 
         fn parse_tbs_cert<'a>(parser: &mut Parser<'a>) -> Result<TBSCertificate<'a>, ASNError> {

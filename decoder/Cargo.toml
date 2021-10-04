@@ -1,7 +1,8 @@
 [package]
-name = "decoder"
+name = "x509-decoder"
 version = "0.1.0"
-authors = ["jadamcrain <jadamcrain@gmail.com>"]
+authors = ["Adam Crain <adam@stepfunc.io>", "Émile Grégoire <emile@stepfunc.io>"]
+edition = "2018"
 
 [dependencies]
 rasn = { path = "../rasn" }

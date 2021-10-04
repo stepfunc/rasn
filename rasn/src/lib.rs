@@ -1,6 +1,4 @@
-extern crate chrono;
-extern crate core;
-
+mod calendar;
 pub mod extensions;
 pub mod oid;
 pub mod parse_all;

@@ -1,7 +1,5 @@
 [package]
 name = "rasn"
 version = "0.1.0"
-authors = ["jadamcrain <jadamcrain@gmail.com>"]
-
-[dependencies]
-chrono = "0.4"
+authors = ["Adam Crain <adam@stepfunc.io>", "Émile Grégoire <emile@stepfunc.io>"]
+edition = "2018"

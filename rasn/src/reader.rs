@@ -57,7 +57,7 @@ impl<'a> Reader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use reader::*;
+    use super::*;
 
     #[test]
     fn decode_length_on_empty_bytes_fails() {
