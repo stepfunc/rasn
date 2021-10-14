@@ -2,7 +2,7 @@ use crate::parser::Parser;
 use crate::printer::{print_type, LinePrinter, Printable};
 use crate::types::{
     ASNError, ASNObjectIdentifier, BitString, Boolean, ExplicitTag, IA5String, Integer,
-    ObjectIdentifier, OctetString, Sequence,
+    ObjectIdentifier, OctetString, Sequence, UTF8String,
 };
 use std::fmt::Debug;
 
@@ -30,14 +30,14 @@ impl<'a> Extensions<'a> {
 pub struct Extension<'a> {
     pub extn_id: ASNObjectIdentifier,
     pub critical: bool,
-    pub content: Box<dyn SpecificExtension + 'a>,
+    pub content: SpecificExtension<'a>,
 }
 
 impl<'a> Extension<'a> {
     pub fn new(
         extn_id: ASNObjectIdentifier,
         critical: bool,
-        content: Box<dyn SpecificExtension + 'a>,
+        content: SpecificExtension<'a>,
     ) -> Extension<'a> {
         Extension {
             extn_id,
@@ -52,13 +52,14 @@ impl<'a> Extension<'a> {
             let is_critical = parser.get_optional_or_default::<Boolean>(false)?;
             let raw_content = parser.expect::<OctetString>()?;
 
-            let content: Box<dyn SpecificExtension> = match oid.values() {
-                [2, 5, 29, 14] => Box::new(SubjectKeyIdentifier::parse(raw_content)?),
-                [2, 5, 29, 15] => Box::new(KeyUsage::parse(raw_content)?),
-                [2, 5, 29, 17] => Box::new(SubjectAlternativeName::parse(raw_content)?),
-                [2, 5, 29, 19] => Box::new(BasicConstraints::parse(raw_content)?),
-                [2, 5, 29, 37] => Box::new(ExtendedKeyUsage::parse(raw_content)?),
-                _ => Box::new(UnknownExtension::new(raw_content)),
+            let content = match oid.values() {
+                [2, 5, 29, 14] => SubjectKeyIdentifier::parse(raw_content)?.into(),
+                [2, 5, 29, 15] => KeyUsage::parse(raw_content)?.into(),
+                [2, 5, 29, 17] => SubjectAlternativeName::parse(raw_content)?.into(),
+                [2, 5, 29, 19] => BasicConstraints::parse(raw_content)?.into(),
+                [2, 5, 29, 37] => ExtendedKeyUsage::parse(raw_content)?.into(),
+                [1, 3, 6, 1, 4, 1, 50316, 802, 1] => ModbusRole::parse(raw_content)?.into(),
+                _ => SpecificExtension::Unknown(raw_content),
             };
 
             Ok(Extension::new(oid, is_critical, content))
@@ -69,7 +70,7 @@ impl<'a> Extension<'a> {
 impl<'a> Printable for Extension<'a> {
     fn print(&self, printer: &mut dyn LinePrinter) {
         printer.begin_line();
-        printer.println_str(self.content.get_name());
+        printer.println_str(self.content.name());
         printer.begin_type();
         printer.begin_line();
         printer.println_fmt(&format_args!("extension id: {}", self.extn_id));
@@ -80,42 +81,48 @@ impl<'a> Printable for Extension<'a> {
     }
 }
 
-pub trait SpecificExtension: Debug + Printable {
-    fn get_name(&self) -> &'static str;
-}
-
 #[derive(Debug)]
-pub struct UnknownExtension<'a> {
-    pub extn_value: &'a [u8],
+pub enum SpecificExtension<'a> {
+    SubjectKeyIdentifier(SubjectKeyIdentifier<'a>),
+    KeyUsage(KeyUsage),
+    SubjectAlternativeName(SubjectAlternativeName<'a>),
+    BasicConstraints(BasicConstraints),
+    ExtendedKeyUsage(ExtendedKeyUsage),
+    ModbusRole(ModbusRole<'a>),
+    Unknown(&'a [u8]),
 }
 
-impl<'a> SpecificExtension for UnknownExtension<'a> {
-    fn get_name(&self) -> &'static str {
-        "Unknown extension"
+impl<'a> SpecificExtension<'a> {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::SubjectKeyIdentifier(_) => "Subject Key Identifier",
+            Self::KeyUsage(_) => "Key Usage",
+            Self::SubjectAlternativeName(_) => "Subject Alternative Name",
+            Self::BasicConstraints(_) => "Basic Constraints",
+            Self::ExtendedKeyUsage(_) => "Extended Key Usage",
+            Self::ModbusRole(_) => "Modbus Role",
+            Self::Unknown(_) => "Unknown",
+        }
     }
 }
 
-impl<'a> UnknownExtension<'a> {
-    fn new(extn_value: &'a [u8]) -> UnknownExtension<'a> {
-        UnknownExtension { extn_value }
-    }
-}
-
-impl<'a> Printable for UnknownExtension<'a> {
+impl<'a> Printable for SpecificExtension<'a> {
     fn print(&self, printer: &mut dyn LinePrinter) {
-        print_type("raw content", &self.extn_value, printer);
+        match self {
+            Self::SubjectKeyIdentifier(x) => x.print(printer),
+            Self::KeyUsage(x) => x.print(printer),
+            Self::SubjectAlternativeName(x) => x.print(printer),
+            Self::BasicConstraints(x) => x.print(printer),
+            Self::ExtendedKeyUsage(x) => x.print(printer),
+            Self::ModbusRole(x) => x.print(printer),
+            Self::Unknown(x) => print_type("raw content", x, printer),
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct SubjectKeyIdentifier<'a> {
     pub key_identifier: &'a [u8],
-}
-
-impl<'a> SpecificExtension for SubjectKeyIdentifier<'a> {
-    fn get_name(&self) -> &'static str {
-        "Subject Key Identifier"
-    }
 }
 
 impl<'a> SubjectKeyIdentifier<'a> {
@@ -132,6 +139,12 @@ impl<'a> Printable for SubjectKeyIdentifier<'a> {
     }
 }
 
+impl<'a> From<SubjectKeyIdentifier<'a>> for SpecificExtension<'a> {
+    fn from(from: SubjectKeyIdentifier<'a>) -> Self {
+        SpecificExtension::SubjectKeyIdentifier(from)
+    }
+}
+
 #[derive(Debug)]
 pub struct KeyUsage {
     pub digital_signature: bool,
@@ -143,12 +156,6 @@ pub struct KeyUsage {
     pub crl_sign: bool,
     pub encipher_only: bool,
     pub decipher_only: bool,
-}
-
-impl SpecificExtension for KeyUsage {
-    fn get_name(&self) -> &'static str {
-        "Key Usage"
-    }
 }
 
 impl KeyUsage {
@@ -229,6 +236,12 @@ impl Printable for KeyUsage {
     }
 }
 
+impl<'a> From<KeyUsage> for SpecificExtension<'a> {
+    fn from(from: KeyUsage) -> Self {
+        SpecificExtension::KeyUsage(from)
+    }
+}
+
 #[derive(Debug)]
 pub enum GeneralName<'a> {
     OtherName(&'a [u8]),
@@ -266,12 +279,6 @@ impl<'a> Printable for GeneralName<'a> {
 #[derive(Debug)]
 pub struct SubjectAlternativeName<'a> {
     pub names: Vec<GeneralName<'a>>,
-}
-
-impl<'a> SpecificExtension for SubjectAlternativeName<'a> {
-    fn get_name(&self) -> &'static str {
-        "Subject Alternative Name"
-    }
 }
 
 impl<'a> SubjectAlternativeName<'a> {
@@ -318,16 +325,16 @@ impl<'a> Printable for SubjectAlternativeName<'a> {
     }
 }
 
+impl<'a> From<SubjectAlternativeName<'a>> for SpecificExtension<'a> {
+    fn from(from: SubjectAlternativeName<'a>) -> Self {
+        SpecificExtension::SubjectAlternativeName(from)
+    }
+}
+
 #[derive(Debug)]
 pub struct BasicConstraints {
     pub ca: bool,
     pub path_length_constraint: Option<i32>,
-}
-
-impl SpecificExtension for BasicConstraints {
-    fn get_name(&self) -> &'static str {
-        "Basic Constraints"
-    }
 }
 
 impl BasicConstraints {
@@ -361,6 +368,12 @@ impl Printable for BasicConstraints {
     }
 }
 
+impl<'a> From<BasicConstraints> for SpecificExtension<'a> {
+    fn from(from: BasicConstraints) -> Self {
+        SpecificExtension::BasicConstraints(from)
+    }
+}
+
 #[derive(Debug)]
 pub enum ExtendedKeyUsagePurpose {
     ServerAuth,
@@ -372,7 +385,7 @@ pub enum ExtendedKeyUsagePurpose {
 }
 
 impl ExtendedKeyUsagePurpose {
-    pub fn from_id(oid: &ASNObjectIdentifier) -> Option<ExtendedKeyUsagePurpose> {
+    pub fn try_from_id(oid: &ASNObjectIdentifier) -> Option<ExtendedKeyUsagePurpose> {
         match oid.values() {
             [1, 3, 6, 1, 5, 5, 7, 3, 1] => Some(ExtendedKeyUsagePurpose::ServerAuth),
             [1, 3, 6, 1, 5, 5, 7, 3, 2] => Some(ExtendedKeyUsagePurpose::ClientAuth),
@@ -390,19 +403,13 @@ pub struct ExtendedKeyUsage {
     pub ext_key_usages: Vec<ExtendedKeyUsagePurpose>,
 }
 
-impl SpecificExtension for ExtendedKeyUsage {
-    fn get_name(&self) -> &'static str {
-        "Extended Key Usage"
-    }
-}
-
 impl ExtendedKeyUsage {
     fn parse(input: &[u8]) -> Result<ExtendedKeyUsage, ASNError> {
         let mut parser = Parser::unwrap_outer_sequence(input)?;
         let mut purposes: Vec<ExtendedKeyUsagePurpose> = Vec::new();
 
         while let Some(oid) = parser.expect_or_end::<ObjectIdentifier>()? {
-            match ExtendedKeyUsagePurpose::from_id(&oid) {
+            match ExtendedKeyUsagePurpose::try_from_id(&oid) {
                 Some(purpose) => purposes.push(purpose),
                 None => return Err(ASNError::UnexpectedOid(oid)),
             }
@@ -411,6 +418,12 @@ impl ExtendedKeyUsage {
         Ok(ExtendedKeyUsage {
             ext_key_usages: purposes,
         })
+    }
+}
+
+impl<'a> From<ExtendedKeyUsage> for SpecificExtension<'a> {
+    fn from(from: ExtendedKeyUsage) -> Self {
+        SpecificExtension::ExtendedKeyUsage(from)
     }
 }
 
@@ -424,5 +437,31 @@ impl Printable for ExtendedKeyUsage {
             printer.println_fmt(&format_args!("{:?}", purpose));
         }
         printer.end_type();
+    }
+}
+
+#[derive(Debug)]
+pub struct ModbusRole<'a> {
+    pub role: &'a str,
+}
+
+impl<'a> ModbusRole<'a> {
+    fn parse(input: &'a [u8]) -> Result<ModbusRole<'a>, ASNError> {
+        let role = Parser::parse_all(input, |parser| parser.expect::<UTF8String>())?;
+
+        Ok(Self { role })
+    }
+}
+
+impl<'a> From<ModbusRole<'a>> for SpecificExtension<'a> {
+    fn from(from: ModbusRole<'a>) -> Self {
+        SpecificExtension::ModbusRole(from)
+    }
+}
+
+impl<'a> Printable for ModbusRole<'a> {
+    fn print(&self, printer: &mut dyn LinePrinter) {
+        printer.begin_line();
+        printer.println_fmt(&format_args!("role: {}", self.role))
     }
 }
