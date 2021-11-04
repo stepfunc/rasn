@@ -168,7 +168,7 @@ impl<'a> ASNExplicitTag<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ASNObjectIdentifier {
     items: Vec<u32>,
 }

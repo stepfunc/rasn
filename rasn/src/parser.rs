@@ -317,10 +317,10 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse_all<'b, T: 'b>(
-        input: &'b [u8],
-        parse: fn(&mut Parser<'b>) -> Result<T, ASNError>,
-    ) -> Result<T, ASNError> {
+    pub fn parse_all<'b, T: 'b, F>(input: &'b [u8], parse: F) -> Result<T, ASNError>
+    where
+        F: FnOnce(&mut Parser<'b>) -> Result<T, ASNError>,
+    {
         let mut parser = Parser::new(input);
         let value = parse(&mut parser)?;
         parser.expect_end()?;

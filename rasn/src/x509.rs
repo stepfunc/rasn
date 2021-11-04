@@ -2,8 +2,8 @@ use crate::extensions::Extensions;
 use crate::parser::Parser;
 use crate::printer::{print_type, LinePrinter, Printable};
 use crate::types::{
-    ASNBitString, ASNError, ASNInteger, ASNObjectIdentifier, ASNType, BitString, Integer,
-    ObjectIdentifier, Sequence, Set, UtcTime,
+    ASNBitString, ASNError, ASNInteger, ASNObjectIdentifier, ASNType, ASNTypeId, BitString,
+    Integer, ObjectIdentifier, Sequence, Set, UtcTime,
 };
 
 #[derive(Debug)]
@@ -99,9 +99,21 @@ impl<'a> Printable for TBSCertificate<'a> {
         printer.println_fmt(&format_args!("serial number: {}", self.serial_number));
 
         print_type("signature", &self.signature, printer);
-        print_type("issuer", &self.issuer, printer);
+
+        if let Ok(result) = self.issuer.parse() {
+            print_type("issuer", &result, printer);
+        } else {
+            print_type("issuer (raw)", &self.issuer, printer);
+        }
+
         print_type("validity", &self.validity, printer);
-        print_type("subject", &self.subject, printer);
+
+        if let Ok(result) = self.subject.parse() {
+            print_type("subject", &result, printer);
+        } else {
+            print_type("subject (raw)", &self.subject, printer);
+        }
+
         print_type(
             "subject public key info",
             &self.subject_public_key_info,
@@ -174,7 +186,7 @@ impl Printable for Validity {
     }
 }
 
-#[derive(Debug)]
+/*#[derive(Debug)]
 pub struct AttributeTypeAndValue<'a> {
     pub id: ASNObjectIdentifier,
     pub value: ASNType<'a>,
@@ -260,6 +272,147 @@ impl<'a> Printable for Name<'a> {
                 printer.end_type();
             }
         }
+    }
+}*/
+
+pub struct RelativeDistinguishedName<'a> {
+    pub country_name: Option<&'a str>,
+    pub state_or_province_unit_name: Option<&'a str>,
+    pub locality_name: Option<&'a str>,
+    pub organization: Option<&'a str>,
+    pub organizational_unit_name: Option<&'a str>,
+    pub common_name: Option<&'a str>,
+}
+
+impl<'a> RelativeDistinguishedName<'a> {
+    fn empty() -> Self {
+        Self {
+            country_name: None,
+            state_or_province_unit_name: None,
+            locality_name: None,
+            organization: None,
+            organizational_unit_name: None,
+            common_name: None,
+        }
+    }
+
+    fn parse(input: &'a [u8]) -> Result<Self, ASNError> {
+        let mut result = Self::empty();
+        let mut parser = Parser::new(input);
+
+        // Iterate on the RDNSequence (the only choice of Name)
+        while let Some(set) = parser.expect_or_end::<Set>()? {
+            let mut parser = Parser::new(set);
+
+            // Parse the RelativeDistinguishedName
+            // expect at least one entry!
+            result.parse_single(parser.expect::<Sequence>()?)?;
+            while let Some(seq) = parser.expect_or_end::<Sequence>()? {
+                result.parse_single(seq)?;
+            }
+        }
+
+        Ok(result)
+    }
+
+    fn parse_single(&mut self, input: &'a [u8]) -> Result<(), ASNError> {
+        fn fill_name_component<'b>(
+            value: &ASNType<'b>,
+            component: &mut Option<&'b str>,
+            oid: &ASNObjectIdentifier,
+        ) -> Result<(), ASNError> {
+            let str_value = match &value {
+                ASNType::IA5String(value) => value.value,
+                ASNType::PrintableString(value) => value.value,
+                ASNType::UTF8String(value) => value.value,
+                _ => {
+                    return Err(ASNError::UnexpectedType(
+                        ASNTypeId::PrintableString,
+                        value.get_id(),
+                    ))
+                }
+            };
+
+            // We only accept a single instance of each AVA type
+            match component {
+                Some(_) => Err(ASNError::UnexpectedOid(oid.clone())),
+                None => {
+                    *component = Some(str_value);
+                    Ok(())
+                }
+            }
+        }
+
+        Parser::parse_all(input, |parser| {
+            let oid = parser.expect::<ObjectIdentifier>()?;
+            let value = parser.expect_any()?;
+
+            match oid.values() {
+                [2, 5, 4, 3] => fill_name_component(&value, &mut self.common_name, &oid),
+                [2, 5, 4, 6] => fill_name_component(&value, &mut self.country_name, &oid),
+                [2, 5, 4, 7] => fill_name_component(&value, &mut self.locality_name, &oid),
+                [2, 5, 4, 8] => {
+                    fill_name_component(&value, &mut self.state_or_province_unit_name, &oid)
+                }
+                [2, 5, 4, 10] => fill_name_component(&value, &mut self.organization, &oid),
+                [2, 5, 4, 11] => {
+                    fill_name_component(&value, &mut self.organizational_unit_name, &oid)
+                }
+                _ => Ok(()), // ignore the AVAs we don't recognize
+            }
+        })
+    }
+}
+
+impl<'a> Printable for RelativeDistinguishedName<'a> {
+    fn print(&self, printer: &mut dyn LinePrinter) {
+        if let Some(value) = self.country_name {
+            printer.begin_line();
+            printer.println_fmt(&format_args!("C: {}", value));
+        }
+        if let Some(value) = self.state_or_province_unit_name {
+            printer.begin_line();
+            printer.println_fmt(&format_args!("ST: {}", value));
+        }
+        if let Some(value) = self.locality_name {
+            printer.begin_line();
+            printer.println_fmt(&format_args!("L: {}", value));
+        }
+        if let Some(value) = self.organization {
+            printer.begin_line();
+            printer.println_fmt(&format_args!("O: {}", value));
+        }
+        if let Some(value) = self.organizational_unit_name {
+            printer.begin_line();
+            printer.println_fmt(&format_args!("OU: {}", value));
+        }
+        if let Some(value) = self.common_name {
+            printer.begin_line();
+            printer.println_fmt(&format_args!("CN: {}", value));
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Name<'a> {
+    pub inner: &'a [u8],
+}
+
+impl<'a> Name<'a> {
+    fn new(input: &'a [u8]) -> Self {
+        Self { inner: input }
+    }
+
+    pub fn parse(&self) -> Result<RelativeDistinguishedName, ASNError> {
+        RelativeDistinguishedName::parse(self.inner)
+    }
+}
+
+impl<'a> Printable for Name<'a> {
+    fn print(&self, printer: &mut dyn LinePrinter) {
+        printer.begin_type();
+        self.inner.print(printer);
+        printer.end_type();
     }
 }
 
@@ -413,9 +566,9 @@ impl<'a> TBSCertificate<'a> {
                 parse_version(parser)?,
                 parser.expect::<Integer>()?,
                 AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
-                Name::parse(parser.expect::<Sequence>()?)?,
+                Name::new(parser.expect::<Sequence>()?),
                 Validity::parse(parser.expect::<Sequence>()?)?,
-                Name::parse(parser.expect::<Sequence>()?)?,
+                Name::new(parser.expect::<Sequence>()?),
                 SubjectPublicKeyInfo::parse(parser.expect::<Sequence>()?)?,
                 parse_optional_bitstring(parser, 1)?,
                 parse_optional_bitstring(parser, 2)?,
