@@ -34,7 +34,7 @@ impl<'a> Reader<'a> {
     }
 
     pub fn peek_byte(&self) -> Result<u8, EndOfStream> {
-        match self.bytes.get(0) {
+        match self.bytes.first() {
             None => Err(EndOfStream),
             Some(x) => Ok(*x),
         }

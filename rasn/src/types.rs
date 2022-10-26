@@ -3,12 +3,12 @@ use crate::reader;
 
 use core::fmt::Display;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ASNInteger<'a> {
     pub bytes: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TagClass {
     Universal,
     Application,
@@ -16,13 +16,13 @@ pub enum TagClass {
     Private,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PC {
     Primitive,
     Constructed,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Identifier {
     pub class: TagClass,
     pub pc: PC,
@@ -94,7 +94,7 @@ impl<'a> Display for ASNInteger<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ASNBitString<'a> {
     // the number of unused bits in last octet [0, 7]
     unused_bits: u8,
@@ -157,7 +157,7 @@ impl<'a> Iterator for ASNBitStringIterator<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ASNExplicitTag<'a> {
     pub value: u8,
     pub contents: &'a [u8],
@@ -169,7 +169,7 @@ impl<'a> ASNExplicitTag<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ASNObjectIdentifier {
     items: Vec<u32>,
 }
@@ -209,7 +209,7 @@ pub trait ASNWrapperType<'a> {
     fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item>;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Boolean {
     pub value: bool,
 }
@@ -233,7 +233,7 @@ impl<'a> ASNWrapperType<'a> for Boolean {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Integer<'a> {
     pub value: ASNInteger<'a>,
 }
@@ -257,7 +257,7 @@ impl<'a> ASNWrapperType<'a> for Integer<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct PrintableString<'a> {
     pub value: &'a str,
 }
@@ -281,7 +281,7 @@ impl<'a> ASNWrapperType<'a> for PrintableString<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct IA5String<'a> {
     pub value: &'a str,
 }
@@ -305,7 +305,7 @@ impl<'a> ASNWrapperType<'a> for IA5String<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct UTF8String<'a> {
     pub value: &'a str,
 }
@@ -329,7 +329,7 @@ impl<'a> ASNWrapperType<'a> for UTF8String<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Sequence<'a> {
     pub value: &'a [u8],
 }
@@ -353,7 +353,7 @@ impl<'a> ASNWrapperType<'a> for Sequence<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Set<'a> {
     pub value: &'a [u8],
 }
@@ -377,7 +377,7 @@ impl<'a> ASNWrapperType<'a> for Set<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ObjectIdentifier {
     pub value: ASNObjectIdentifier,
 }
@@ -401,7 +401,7 @@ impl<'a> ASNWrapperType<'a> for ObjectIdentifier {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct OctetString<'a> {
     pub value: &'a [u8],
 }
@@ -425,7 +425,7 @@ impl<'a> ASNWrapperType<'a> for OctetString<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct BitString<'a> {
     pub value: ASNBitString<'a>,
 }
@@ -450,7 +450,7 @@ impl<'a> ASNWrapperType<'a> for BitString<'a> {
 }
 
 /// UTC time stored as an u64 count of non-leap seconds since UNIX Epoch.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
 pub struct UtcTime {
     pub value: u64,
 }
@@ -485,7 +485,7 @@ impl<'a> ASNWrapperType<'a> for UtcTime {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ExplicitTag<'a> {
     pub value: ASNExplicitTag<'a>,
 }
@@ -509,7 +509,7 @@ impl<'a> ASNWrapperType<'a> for ExplicitTag<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ASNType<'a> {
     Boolean(Boolean),
     Sequence(Sequence<'a>),
@@ -529,7 +529,7 @@ pub enum ASNType<'a> {
 
 // An identifier for the type that carries no data
 // used for error purposes
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ASNTypeId {
     Boolean,
     Sequence,
@@ -598,7 +598,7 @@ impl<'a> core::fmt::Display for ASNType<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ASNError {
     // these errors relate to core DER parsing
     BadBooleanLength(usize),
