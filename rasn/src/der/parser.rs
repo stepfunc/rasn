@@ -1,9 +1,9 @@
 use core::str;
 
-use crate::asn::calendar;
-use crate::asn::reader::Reader;
-use crate::asn::types::ASNErrorVariant;
-use crate::asn::types::*;
+use crate::der::calendar;
+use crate::der::reader::Reader;
+use crate::der::types::ASNErrorVariant;
+use crate::der::types::*;
 
 type ASNResult<'a> = Result<ASNType<'a>, ASNErrorVariant>;
 

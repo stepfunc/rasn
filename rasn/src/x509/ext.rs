@@ -1,6 +1,6 @@
-use crate::asn::parser::Parser;
-use crate::asn::types::*;
-use crate::printer::{print_type, LinePrinter, Printable};
+use crate::der::parser::Parser;
+use crate::der::types::*;
+use crate::x509::printer::{print_type, LinePrinter, Printable};
 
 #[derive(Debug)]
 pub struct Extensions<'a> {

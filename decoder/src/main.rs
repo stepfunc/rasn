@@ -5,8 +5,8 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::process;
 
-use rasn::asn::der::parse_all;
-use rasn::printer::{ConsoleLinePrinter, Printable};
+use rasn::der::parse_all;
+use rasn::x509::printer::{ConsoleLinePrinter, Printable};
 use rasn::x509::Certificate;
 
 fn get_bytes(file: &str) -> Result<Vec<u8>, std::io::Error> {
