@@ -29,6 +29,7 @@ impl<'a> Reader<'a> {
         self.bytes.is_empty()
     }
 
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.bytes.len()
     }

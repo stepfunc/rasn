@@ -1,4 +1,4 @@
-use rasn::parse_all::ParseHandler;
+use rasn::der::ParseHandler;
 use rasn::types::{ASNError, ASNType};
 
 pub struct ParsePrinter {

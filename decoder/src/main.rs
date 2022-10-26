@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::process;
 
-use rasn::parse_all::parse_all;
+use rasn::der::parse_all;
 use rasn::printer::{ConsoleLinePrinter, Printable};
 use rasn::x509::Certificate;
 
