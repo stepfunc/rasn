@@ -1,10 +1,6 @@
-Commercial library by [Step Function I/O](https://stepfunc.io/)
+# rx509
 
-# rasn
+Zero dependency X.509 decoder
 
-DER and X.509 decoder
-
-# License
-
-Refer to `License.txt` for the terms of the non-commercial license. This software is publicly available, but is not
-"open source". You must purchase a commercial license to use this software for profit.
+## License
+Licensed under the terms of the MIT or Apache v2 licenses at your choice.

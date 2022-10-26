@@ -3,3 +3,7 @@ name = "rx509"
 version = "0.2.0"
 authors = ["Step Function I/O <info@stepfunc.io>"]
 edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "zero dependency X.509 decoder"
+homepage = "https://github.com/stepfunc/rasn/"
+readme = "../README.md"
