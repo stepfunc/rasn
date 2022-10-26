@@ -2,6 +2,7 @@ use crate::oid::get_oid;
 use crate::reader;
 
 use core::fmt::Display;
+use std::fmt::Formatter;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ASNInteger<'a> {
@@ -467,7 +468,7 @@ impl UtcTime {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| Self::from_seconds_since_epoch(duration.as_secs()))
-            .map_err(|_| ASNError::BadUTCTime)
+            .map_err(|_| ASNErrorVariant::BadUTCTime.into())
     }
 }
 impl<'a> ASNWrapperType<'a> for UtcTime {
@@ -599,7 +600,18 @@ impl<'a> core::fmt::Display for ASNType<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum ASNError {
+pub struct ASNError {
+    pub(crate) variant: ASNErrorVariant,
+}
+
+impl core::convert::From<ASNErrorVariant> for ASNError {
+    fn from(variant: ASNErrorVariant) -> Self {
+        Self { variant }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ASNErrorVariant {
     // these errors relate to core DER parsing
     BadBooleanLength(usize),
     BadBooleanValue(u8),
@@ -624,67 +636,79 @@ pub enum ASNError {
     UnexpectedTag(u8),                    // unexpected tag
 }
 
-impl core::convert::From<reader::EndOfStream> for ASNError {
-    fn from(_: reader::EndOfStream) -> Self {
-        ASNError::EndOfStream
-    }
-}
-
-impl core::convert::From<core::str::Utf8Error> for ASNError {
-    fn from(err: core::str::Utf8Error) -> Self {
-        ASNError::BadUTF8(err)
-    }
-}
-
 impl core::fmt::Display for ASNError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.variant)
+    }
+}
+
+impl std::error::Error for ASNError {}
+
+impl core::convert::From<reader::EndOfStream> for ASNErrorVariant {
+    fn from(_: reader::EndOfStream) -> Self {
+        ASNErrorVariant::EndOfStream
+    }
+}
+
+impl core::convert::From<core::str::Utf8Error> for ASNErrorVariant {
+    fn from(err: core::str::Utf8Error) -> Self {
+        ASNErrorVariant::BadUTF8(err)
+    }
+}
+
+impl core::fmt::Display for ASNErrorVariant {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
-            ASNError::BadBooleanLength(len) => write!(f, "Bad boolean length: {}", len),
-            ASNError::BadBooleanValue(value) => write!(f, "Bad boolean value: {}", value),
-            ASNError::ZeroLengthInteger => f.write_str("zero length integer"),
-            ASNError::NullWithNonEmptyContents(length) => {
+            ASNErrorVariant::BadBooleanLength(len) => write!(f, "Bad boolean length: {}", len),
+            ASNErrorVariant::BadBooleanValue(value) => write!(f, "Bad boolean value: {}", value),
+            ASNErrorVariant::ZeroLengthInteger => f.write_str("zero length integer"),
+            ASNErrorVariant::NullWithNonEmptyContents(length) => {
                 write!(f, "NULL type w/ non-empty contents (length == {})", length)
             }
-            ASNError::UnsupportedId(id) => write!(f, "Unsupported id: {:?})", id),
-            ASNError::UnsupportedIndefiniteLength => {
+            ASNErrorVariant::UnsupportedId(id) => write!(f, "Unsupported id: {:?})", id),
+            ASNErrorVariant::UnsupportedIndefiniteLength => {
                 f.write_str("Encountered indefinite length encoding. Not allowed in DER.")
             }
-            ASNError::ReservedLengthValue => f.write_str("Length byte count of 127 is reserved"),
-            ASNError::UnsupportedLengthByteCount(length) => {
+            ASNErrorVariant::ReservedLengthValue => {
+                f.write_str("Length byte count of 127 is reserved")
+            }
+            ASNErrorVariant::UnsupportedLengthByteCount(length) => {
                 write!(f, "Length byte count of {} not supported", length)
             }
-            ASNError::BadLengthEncoding(count, value) => {
+            ASNErrorVariant::BadLengthEncoding(count, value) => {
                 write!(f, "Value {} encoded using {} bytes", value, count)
             }
-            ASNError::BadOidLength => f.write_str("Bad OID length"),
-            ASNError::BadUTF8(err) => write!(f, "Bad UTF8 encoding: {}", err),
-            ASNError::BadUTCTime => write!(f, "Bad UTC time string"),
-            ASNError::BitStringUnusedBitsTooLarge(unused) => write!(
+            ASNErrorVariant::BadOidLength => f.write_str("Bad OID length"),
+            ASNErrorVariant::BadUTF8(err) => write!(f, "Bad UTF8 encoding: {}", err),
+            ASNErrorVariant::BadUTCTime => write!(f, "Bad UTC time string"),
+            ASNErrorVariant::BitStringUnusedBitsTooLarge(unused) => write!(
                 f,
                 "Bit string w/ unused bits outside range [0..7]: {}",
                 unused
             ),
-            ASNError::EndOfStream => {
+            ASNErrorVariant::EndOfStream => {
                 f.write_str("Consumed all input before parsing required fields")
             }
-            ASNError::UnexpectedType(expected, actual) => {
+            ASNErrorVariant::UnexpectedType(expected, actual) => {
                 write!(f, "Expected {:?}, but type is {:?}", expected, actual)
             }
-            ASNError::ExpectedEnd(actual) => {
+            ASNErrorVariant::ExpectedEnd(actual) => {
                 write!(f, "Expected end of stream but type is {:?}", actual)
             }
-            ASNError::IntegerTooLarge(num_bytes) => write!(
+            ASNErrorVariant::IntegerTooLarge(num_bytes) => write!(
                 f,
                 "The integer length exceeds the representation of i32: {}",
                 num_bytes
             ),
-            ASNError::BadEnumValue(name, value) => {
+            ASNErrorVariant::BadEnumValue(name, value) => {
                 write!(f, "The enum '{}' has not mapping for value {}", name, value)
             }
-            ASNError::UnexpectedOid(oid) => {
+            ASNErrorVariant::UnexpectedOid(oid) => {
                 write!(f, "The Object Identifier '{}' was unexpected.", oid)
             }
-            ASNError::UnexpectedTag(tag) => write!(f, "The explicit tag '{}' was unexpected.", tag),
+            ASNErrorVariant::UnexpectedTag(tag) => {
+                write!(f, "The explicit tag '{}' was unexpected.", tag)
+            }
         }
     }
 }

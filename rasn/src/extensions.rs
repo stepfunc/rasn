@@ -1,8 +1,8 @@
 use crate::parser::Parser;
 use crate::printer::{print_type, LinePrinter, Printable};
 use crate::types::{
-    ASNError, ASNObjectIdentifier, BitString, Boolean, ExplicitTag, IA5String, Integer,
-    ObjectIdentifier, OctetString, Sequence, UTF8String,
+    ASNError, ASNErrorVariant, ASNObjectIdentifier, BitString, Boolean, ExplicitTag, IA5String,
+    Integer, ObjectIdentifier, OctetString, Sequence, UTF8String,
 };
 
 #[derive(Debug)]
@@ -46,7 +46,7 @@ impl<'a> Extension<'a> {
     }
 
     pub fn parse(input: &'a [u8]) -> Result<Extension, ASNError> {
-        Parser::parse_all(input, |parser| {
+        let ret = Parser::parse_all(input, |parser| {
             let oid = parser.expect::<ObjectIdentifier>()?;
             let is_critical = parser.get_optional_or_default::<Boolean>(false)?;
             let raw_content = parser.expect::<OctetString>()?;
@@ -62,7 +62,8 @@ impl<'a> Extension<'a> {
             };
 
             Ok(Extension::new(oid, is_critical, content))
-        })
+        })?;
+        Ok(ret)
     }
 }
 
@@ -125,7 +126,7 @@ pub struct SubjectKeyIdentifier<'a> {
 }
 
 impl<'a> SubjectKeyIdentifier<'a> {
-    fn parse(input: &[u8]) -> Result<SubjectKeyIdentifier, ASNError> {
+    fn parse(input: &[u8]) -> Result<SubjectKeyIdentifier, ASNErrorVariant> {
         let mut parser = Parser::new(input);
         let key_identifier = parser.expect::<OctetString>()?;
         Ok(SubjectKeyIdentifier { key_identifier })
@@ -158,7 +159,7 @@ pub struct KeyUsage {
 }
 
 impl KeyUsage {
-    fn parse(input: &[u8]) -> Result<KeyUsage, ASNError> {
+    fn parse(input: &[u8]) -> Result<KeyUsage, ASNErrorVariant> {
         let mut parser = Parser::new(input);
         let bit_string = parser.expect::<BitString>()?;
 
@@ -281,7 +282,7 @@ pub struct SubjectAlternativeName<'a> {
 }
 
 impl<'a> SubjectAlternativeName<'a> {
-    fn parse(input: &[u8]) -> Result<SubjectAlternativeName, ASNError> {
+    fn parse(input: &[u8]) -> Result<SubjectAlternativeName, ASNErrorVariant> {
         let mut parser = Parser::unwrap_outer_sequence(input)?;
         let mut names: Vec<GeneralName> = Vec::new();
 
@@ -303,7 +304,7 @@ impl<'a> SubjectAlternativeName<'a> {
                     parser.parse_implicit::<ObjectIdentifier>()?,
                 )),
 
-                _ => return Err(ASNError::UnexpectedTag(tag.value)),
+                _ => return Err(ASNErrorVariant::UnexpectedTag(tag.value)),
             };
         }
 
@@ -337,14 +338,14 @@ pub struct BasicConstraints {
 }
 
 impl BasicConstraints {
-    fn parse(input: &[u8]) -> Result<BasicConstraints, ASNError> {
+    fn parse(input: &[u8]) -> Result<BasicConstraints, ASNErrorVariant> {
         let mut parser = Parser::unwrap_outer_sequence(input)?;
         let ca = parser.get_optional_or_default::<Boolean>(false)?;
         let constraint = parser.get_optional::<Integer>()?;
         let constraint = match constraint {
             Some(value) => match value.as_i32() {
                 Some(value) => Ok(Some(value)),
-                None => Err(ASNError::IntegerTooLarge(value.bytes.len())),
+                None => Err(ASNErrorVariant::IntegerTooLarge(value.bytes.len())),
             },
             None => Ok(None),
         }?;
@@ -403,14 +404,14 @@ pub struct ExtendedKeyUsage {
 }
 
 impl ExtendedKeyUsage {
-    fn parse(input: &[u8]) -> Result<ExtendedKeyUsage, ASNError> {
+    fn parse(input: &[u8]) -> Result<ExtendedKeyUsage, ASNErrorVariant> {
         let mut parser = Parser::unwrap_outer_sequence(input)?;
         let mut purposes: Vec<ExtendedKeyUsagePurpose> = Vec::new();
 
         while let Some(oid) = parser.expect_or_end::<ObjectIdentifier>()? {
             match ExtendedKeyUsagePurpose::try_from_id(&oid) {
                 Some(purpose) => purposes.push(purpose),
-                None => return Err(ASNError::UnexpectedOid(oid)),
+                None => return Err(ASNErrorVariant::UnexpectedOid(oid)),
             }
         }
 
@@ -445,7 +446,7 @@ pub struct ModbusRole<'a> {
 }
 
 impl<'a> ModbusRole<'a> {
-    fn parse(input: &'a [u8]) -> Result<ModbusRole<'a>, ASNError> {
+    fn parse(input: &'a [u8]) -> Result<ModbusRole<'a>, ASNErrorVariant> {
         let role = Parser::parse_all(input, |parser| parser.expect::<UTF8String>())?;
 
         Ok(Self { role })

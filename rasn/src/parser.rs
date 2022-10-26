@@ -2,10 +2,10 @@ use core::str;
 
 use crate::calendar;
 use crate::reader::Reader;
-use crate::types::ASNError::UnsupportedId;
+use crate::types::ASNErrorVariant::UnsupportedId;
 use crate::types::*;
 
-type ASNResult<'a> = Result<ASNType<'a>, ASNError>;
+type ASNResult<'a> = Result<ASNType<'a>, ASNErrorVariant>;
 
 fn parse_seq(contents: &[u8]) -> ASNResult {
     Ok(Sequence::asn(contents))
@@ -19,7 +19,7 @@ fn parse_null(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
         Ok(ASNType::Null)
     } else {
-        Err(ASNError::NullWithNonEmptyContents(contents.len()))
+        Err(ASNErrorVariant::NullWithNonEmptyContents(contents.len()))
     }
 }
 
@@ -27,14 +27,14 @@ fn parse_boolean(contents: &[u8]) -> ASNResult {
     match contents {
         [0xFF] => Ok(Boolean::asn(true)),
         [0x00] => Ok(Boolean::asn(false)),
-        [x] => Err(ASNError::BadBooleanValue(*x)),
-        _ => Err(ASNError::BadBooleanLength(contents.len())),
+        [x] => Err(ASNErrorVariant::BadBooleanValue(*x)),
+        _ => Err(ASNErrorVariant::BadBooleanLength(contents.len())),
     }
 }
 
 fn parse_integer(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
-        Err(ASNError::ZeroLengthInteger)
+        Err(ASNErrorVariant::ZeroLengthInteger)
     } else {
         Ok(Integer::asn(ASNInteger::new(contents)))
     }
@@ -82,21 +82,21 @@ fn parse_time(contents: &[u8], time_type: TimeType) -> ASNResult {
 
     let mut reader = Reader::new(contents);
 
-    fn read_digit(inner: &mut Reader) -> Result<u64, ASNError> {
+    fn read_digit(inner: &mut Reader) -> Result<u64, ASNErrorVariant> {
         const DIGIT: core::ops::RangeInclusive<u8> = b'0'..=b'9';
-        let b = inner.read_byte().map_err(|_| ASNError::BadUTCTime)?;
+        let b = inner.read_byte().map_err(|_| ASNErrorVariant::BadUTCTime)?;
         if DIGIT.contains(&b) {
             return Ok(u64::from(b - DIGIT.start()));
         }
-        Err(ASNError::BadUTCTime)
+        Err(ASNErrorVariant::BadUTCTime)
     }
 
-    fn read_two_digits(inner: &mut Reader, min: u64, max: u64) -> Result<u64, ASNError> {
+    fn read_two_digits(inner: &mut Reader, min: u64, max: u64) -> Result<u64, ASNErrorVariant> {
         let hi = read_digit(inner)?;
         let lo = read_digit(inner)?;
         let value = (hi * 10) + lo;
         if value < min || value > max {
-            return Err(ASNError::BadUTCTime);
+            return Err(ASNErrorVariant::BadUTCTime);
         }
         Ok(value)
     }
@@ -122,9 +122,11 @@ fn parse_time(contents: &[u8], time_type: TimeType) -> ASNResult {
     let minutes = read_two_digits(&mut reader, 0, 59)?;
     let seconds = read_two_digits(&mut reader, 0, 59)?;
 
-    let time_zone = reader.read_byte().map_err(|_| ASNError::BadUTCTime)?;
+    let time_zone = reader
+        .read_byte()
+        .map_err(|_| ASNErrorVariant::BadUTCTime)?;
     if time_zone != b'Z' {
-        return Err(ASNError::BadUTCTime);
+        return Err(ASNErrorVariant::BadUTCTime);
     }
 
     calendar::time_from_ymdhms_utc(year, month, day_of_month, hours, minutes, seconds)
@@ -134,18 +136,18 @@ fn parse_time(contents: &[u8], time_type: TimeType) -> ASNResult {
 fn parse_string<T: Fn(&str) -> ASNType>(contents: &[u8], create: T) -> ASNResult {
     match str::from_utf8(contents) {
         Ok(x) => Ok(create(x)),
-        Err(x) => Err(ASNError::BadUTF8(x)),
+        Err(x) => Err(ASNErrorVariant::BadUTF8(x)),
     }
 }
 
 fn parse_bit_string(contents: &[u8]) -> ASNResult {
     if contents.is_empty() {
-        return Err(ASNError::EndOfStream);
+        return Err(ASNErrorVariant::EndOfStream);
     }
 
     let unused_bits = contents[0];
     if unused_bits > 7 {
-        return Err(ASNError::BitStringUnusedBitsTooLarge(unused_bits));
+        return Err(ASNErrorVariant::BitStringUnusedBitsTooLarge(unused_bits));
     }
 
     Ok(BitString::asn(ASNBitString::new(
@@ -155,13 +157,13 @@ fn parse_bit_string(contents: &[u8]) -> ASNResult {
 }
 
 fn parse_object_identifier(contents: &[u8]) -> ASNResult {
-    fn parse_one(reader: &mut Reader) -> Result<u32, ASNError> {
+    fn parse_one(reader: &mut Reader) -> Result<u32, ASNErrorVariant> {
         let mut sum: u32 = 0;
         let mut count: u32 = 0;
         loop {
             // only allow 4*7 = 28 bits so that we don't overflow u32
             if count > 3 {
-                return Err(ASNError::BadOidLength);
+                return Err(ASNErrorVariant::BadOidLength);
             };
 
             let next_byte = reader.read_byte()?;
@@ -195,7 +197,7 @@ fn parse_object_identifier(contents: &[u8]) -> ASNResult {
     Ok(ObjectIdentifier::asn(ASNObjectIdentifier::new(items)))
 }
 
-fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
+fn parse_length(reader: &mut Reader) -> Result<usize, ASNErrorVariant> {
     let first_byte = reader.read_byte()?;
 
     let top_bit = first_byte & 0b1000_0000;
@@ -209,14 +211,14 @@ fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
     // value. For a given count of bytes, the encoded
     // length must fit into the minimum length representation
     let min_value_for_count: u64 = match count_of_bytes {
-        0 => return Err(ASNError::UnsupportedIndefiniteLength),
-        127 => return Err(ASNError::ReservedLengthValue),
+        0 => return Err(ASNErrorVariant::UnsupportedIndefiniteLength),
+        127 => return Err(ASNErrorVariant::ReservedLengthValue),
         // anything < these numbers indicate the value should have been encoded with fewer bytes
         1 => 128,
         2 => 256,
         3 => 65536,
         4 => 16777216,
-        _ => return Err(ASNError::UnsupportedLengthByteCount(count_of_bytes)),
+        _ => return Err(ASNErrorVariant::UnsupportedLengthByteCount(count_of_bytes)),
     };
 
     let mut value: usize = 0;
@@ -227,7 +229,7 @@ fn parse_length(reader: &mut Reader) -> Result<usize, ASNError> {
     }
 
     if (value as u64) < min_value_for_count {
-        return Err(ASNError::BadLengthEncoding(count_of_bytes, value));
+        return Err(ASNErrorVariant::BadLengthEncoding(count_of_bytes, value));
     }
 
     Ok(value)
@@ -241,7 +243,7 @@ fn parse_one_type<'a>(reader: &mut Reader<'a>) -> ASNResult<'a> {
             let contents = get_contents(reader)?;
             parse_content(&asn_type, tag, contents)
         }
-        None => Err(ASNError::UnsupportedId(id)),
+        None => Err(ASNErrorVariant::UnsupportedId(id)),
     }
 }
 
@@ -286,7 +288,7 @@ fn read_type(id: &Identifier) -> Option<(ASNTypeId, u8)> {
     }
 }
 
-fn get_contents<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], ASNError> {
+fn get_contents<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], ASNErrorVariant> {
     let length = parse_length(reader)?;
     Ok(reader.take(length)?)
 }
@@ -312,14 +314,14 @@ fn parse_content<'a>(type_id: &ASNTypeId, tag: u8, contents: &'a [u8]) -> ASNRes
     }
 }
 
-pub struct Parser<'a> {
+pub(crate) struct Parser<'a> {
     reader: Reader<'a>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse_all<'b, T: 'b, F>(input: &'b [u8], parse: F) -> Result<T, ASNError>
+    pub(crate) fn parse_all<'b, T: 'b, F>(input: &'b [u8], parse: F) -> Result<T, ASNErrorVariant>
     where
-        F: FnOnce(&mut Parser<'b>) -> Result<T, ASNError>,
+        F: FnOnce(&mut Parser<'b>) -> Result<T, ASNErrorVariant>,
     {
         let mut parser = Parser::new(input);
         let value = parse(&mut parser)?;
@@ -327,41 +329,22 @@ impl<'a> Parser<'a> {
         Ok(value)
     }
 
-    pub fn new(input: &'a [u8]) -> Parser {
+    pub(crate) fn new(input: &'a [u8]) -> Parser {
         Parser {
             reader: Reader::new(input),
         }
     }
 
-    pub fn unwrap_outer_sequence(input: &'a [u8]) -> Result<Parser, ASNError> {
+    pub(crate) fn unwrap_outer_sequence(input: &'a [u8]) -> Result<Parser, ASNErrorVariant> {
         let mut parser = Parser::new(input);
         let bytes = parser.expect::<Sequence>()?;
         parser.expect_end()?;
         Ok(Parser::new(bytes))
     }
-
-    pub fn unwrap_outer_set(input: &'a [u8]) -> Result<Parser, ASNError> {
-        let mut parser = Parser::new(input);
-        let bytes = parser.expect::<Set>()?;
-        parser.expect_end()?;
-        Ok(Parser::new(bytes))
-    }
-
-    pub fn get_explicitly_tagged_value_or_default<T: ASNWrapperType<'a>>(
+    pub(crate) fn get_optional_explicit_tag_value<T: ASNWrapperType<'a>>(
         &mut self,
         tag: u8,
-        default: T::Item,
-    ) -> Result<T::Item, ASNError> {
-        match self.get_optional_explicit_tag_value::<T>(tag)? {
-            Some(item) => Ok(item),
-            None => Ok(default),
-        }
-    }
-
-    pub fn get_optional_explicit_tag_value<T: ASNWrapperType<'a>>(
-        &mut self,
-        tag: u8,
-    ) -> Result<Option<T::Item>, ASNError> {
+    ) -> Result<Option<T::Item>, ASNErrorVariant> {
         match self.get_optional_explicit_tag(tag)? {
             Some(tag) => {
                 let mut parser = Parser::new(tag.contents);
@@ -371,10 +354,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn get_optional_explicit_tag(
+    pub(crate) fn get_optional_explicit_tag(
         &mut self,
         tag: u8,
-    ) -> Result<Option<ASNExplicitTag<'a>>, ASNError> {
+    ) -> Result<Option<ASNExplicitTag<'a>>, ASNErrorVariant> {
         if self.reader.is_empty() {
             return Ok(None);
         }
@@ -390,17 +373,19 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn get_optional_or_default<T: ASNWrapperType<'a>>(
+    pub(crate) fn get_optional_or_default<T: ASNWrapperType<'a>>(
         &mut self,
         default: T::Item,
-    ) -> Result<T::Item, ASNError> {
+    ) -> Result<T::Item, ASNErrorVariant> {
         match self.get_optional::<T>()? {
             Some(value) => Ok(value),
             None => Ok(default),
         }
     }
 
-    pub fn get_optional<T: ASNWrapperType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
+    pub(crate) fn get_optional<T: ASNWrapperType<'a>>(
+        &mut self,
+    ) -> Result<Option<T::Item>, ASNErrorVariant> {
         if self.reader.is_empty() {
             return Ok(None);
         }
@@ -414,7 +399,9 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_implicit<T: ASNWrapperType<'a>>(&mut self) -> Result<T::Item, ASNError> {
+    pub(crate) fn parse_implicit<T: ASNWrapperType<'a>>(
+        &mut self,
+    ) -> Result<T::Item, ASNErrorVariant> {
         let result = match T::get_value(parse_content(&T::get_id(), 0, self.reader.remainder())?) {
             Some(value) => Ok(value),
             None => panic!("Wrapper should have returned a {:?}!", T::get_id()),
@@ -423,36 +410,38 @@ impl<'a> Parser<'a> {
         result
     }
 
-    pub fn expect<T: ASNWrapperType<'a>>(&mut self) -> Result<T::Item, ASNError> {
+    pub(crate) fn expect<T: ASNWrapperType<'a>>(&mut self) -> Result<T::Item, ASNErrorVariant> {
         match self.expect_any() {
             Ok(asn_type) => {
                 let id = asn_type.get_id();
                 match T::get_value(asn_type) {
                     Some(value) => Ok(value),
-                    None => Err(ASNError::UnexpectedType(T::get_id(), id)),
+                    None => Err(ASNErrorVariant::UnexpectedType(T::get_id(), id)),
                 }
             }
             Err(err) => Err(err),
         }
     }
 
-    pub fn expect_or_end<T: ASNWrapperType<'a>>(&mut self) -> Result<Option<T::Item>, ASNError> {
+    pub(crate) fn expect_or_end<T: ASNWrapperType<'a>>(
+        &mut self,
+    ) -> Result<Option<T::Item>, ASNErrorVariant> {
         match self.expect::<T>() {
             Ok(value) => Ok(Some(value)),
-            Err(ASNError::EndOfStream) => Ok(None),
+            Err(ASNErrorVariant::EndOfStream) => Ok(None),
             Err(err) => Err(err),
         }
     }
 
-    pub fn expect_any(&mut self) -> Result<ASNType<'a>, ASNError> {
+    pub(crate) fn expect_any(&mut self) -> Result<ASNType<'a>, ASNErrorVariant> {
         match self.next() {
             Some(Ok(asn)) => Ok(asn),
             Some(Err(err)) => Err(err),
-            None => Err(ASNError::EndOfStream),
+            None => Err(ASNErrorVariant::EndOfStream),
         }
     }
 
-    pub fn expect_any_or_end(&mut self) -> Result<Option<ASNType<'a>>, ASNError> {
+    pub(crate) fn expect_any_or_end(&mut self) -> Result<Option<ASNType<'a>>, ASNErrorVariant> {
         match self.next() {
             Some(Ok(asn)) => Ok(Some(asn)),
             Some(Err(err)) => Err(err),
@@ -460,17 +449,17 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn expect_end(&mut self) -> Result<(), ASNError> {
+    pub(crate) fn expect_end(&mut self) -> Result<(), ASNErrorVariant> {
         match self.next() {
             None => Ok(()),
             Some(Err(err)) => Err(err),
-            Some(Ok(asn)) => Err(ASNError::ExpectedEnd(asn.get_id())),
+            Some(Ok(asn)) => Err(ASNErrorVariant::ExpectedEnd(asn.get_id())),
         }
     }
 }
 
 impl<'a> Iterator for Parser<'a> {
-    type Item = Result<ASNType<'a>, ASNError>;
+    type Item = Result<ASNType<'a>, ASNErrorVariant>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.reader.is_empty() {
@@ -493,7 +482,7 @@ mod tests {
 
     const TOP_BIT: u8 = 1 << 7;
 
-    fn test_parse_length(bytes: &[u8]) -> Result<usize, ASNError> {
+    fn test_parse_length(bytes: &[u8]) -> Result<usize, ASNErrorVariant> {
         let mut reader = Reader::new(bytes);
         parse_length(&mut reader)
     }
@@ -501,7 +490,7 @@ mod tests {
     #[test]
     fn decode_length_on_empty_bytes_fails() {
         let mut reader = Reader::new(&[]);
-        assert_eq!(parse_length(&mut reader), Err(ASNError::EndOfStream));
+        assert_eq!(parse_length(&mut reader), Err(ASNErrorVariant::EndOfStream));
     }
 
     #[test]
@@ -509,7 +498,7 @@ mod tests {
         let mut reader = Reader::new(&[0x80]);
         assert_eq!(
             parse_length(&mut reader),
-            Err(ASNError::UnsupportedIndefiniteLength)
+            Err(ASNErrorVariant::UnsupportedIndefiniteLength)
         )
     }
 
@@ -518,7 +507,7 @@ mod tests {
         let mut reader = Reader::new(&[0xFF]);
         assert_eq!(
             parse_length(&mut reader),
-            Err(ASNError::ReservedLengthValue)
+            Err(ASNErrorVariant::ReservedLengthValue)
         )
     }
 
@@ -534,7 +523,7 @@ mod tests {
         assert_eq!(test_parse_length(&[TOP_BIT | 1, 128]), Ok(128));
         assert_eq!(
             test_parse_length(&[TOP_BIT | 1, 127]),
-            Err(ASNError::BadLengthEncoding(1, 127))
+            Err(ASNErrorVariant::BadLengthEncoding(1, 127))
         );
     }
 
@@ -543,7 +532,7 @@ mod tests {
         assert_eq!(test_parse_length(&[TOP_BIT | 2, 0x01, 0x00]), Ok(256));
         assert_eq!(
             test_parse_length(&[TOP_BIT | 2, 0x00, 0xFF]),
-            Err(ASNError::BadLengthEncoding(2, 255))
+            Err(ASNErrorVariant::BadLengthEncoding(2, 255))
         );
     }
 
@@ -555,7 +544,7 @@ mod tests {
         );
         assert_eq!(
             test_parse_length(&[TOP_BIT | 3, 0x00, 0xFF, 0xFF]),
-            Err(ASNError::BadLengthEncoding(3, 65535))
+            Err(ASNErrorVariant::BadLengthEncoding(3, 65535))
         );
     }
 
@@ -567,7 +556,7 @@ mod tests {
         );
         assert_eq!(
             test_parse_length(&[TOP_BIT | 4, 0x00, 0xFF, 0xFF, 0xFF]),
-            Err(ASNError::BadLengthEncoding(4, 16777215))
+            Err(ASNErrorVariant::BadLengthEncoding(4, 16777215))
         );
     }
 
@@ -604,7 +593,7 @@ mod tests {
         let mut reader = Reader::new(&[TOP_BIT | 5, 0x01, 0x02, 0x03, 0x04, 0x05]);
         assert_eq!(
             parse_length(&mut reader),
-            Err(ASNError::UnsupportedLengthByteCount(5))
+            Err(ASNErrorVariant::UnsupportedLengthByteCount(5))
         )
     }
 
@@ -613,7 +602,7 @@ mod tests {
         let mut reader = Reader::new(&[0xFF]);
         assert_eq!(
             parse_one_type(&mut reader),
-            Err(ASNError::UnsupportedId(Identifier::new(
+            Err(ASNErrorVariant::UnsupportedId(Identifier::new(
                 TagClass::Private,
                 PC::Constructed,
                 0x1F
@@ -626,7 +615,7 @@ mod tests {
         let mut reader = Reader::new(&[0x1F, 0x00]);
         assert_eq!(
             parse_one_type(&mut reader),
-            Err(ASNError::UnsupportedId(Identifier::new(
+            Err(ASNErrorVariant::UnsupportedId(Identifier::new(
                 TagClass::Universal,
                 PC::Primitive,
                 0x1F
@@ -647,7 +636,10 @@ mod tests {
     #[test]
     fn parse_sequence_fails_if_insufficient_bytes() {
         let mut reader = Reader::new(&[0x30, 0x0F, 0xDE, 0xAD]);
-        assert_eq!(parse_one_type(&mut reader), Err(ASNError::EndOfStream));
+        assert_eq!(
+            parse_one_type(&mut reader),
+            Err(ASNErrorVariant::EndOfStream)
+        );
     }
 
     #[test]

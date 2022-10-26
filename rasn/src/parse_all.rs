@@ -12,6 +12,7 @@ pub fn parse_all(input: &[u8], handler: &mut dyn ParseHandler) -> Result<(), ASN
     for result in Parser::new(input) {
         match result {
             Err(err) => {
+                let err = err.into();
                 handler.on_error(&err);
                 return Err(err);
             }

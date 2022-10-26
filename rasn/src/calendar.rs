@@ -17,7 +17,7 @@
 // ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 // OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-use crate::types::{ASNError, UtcTime};
+use crate::types::{ASNErrorVariant, UtcTime};
 
 pub(crate) fn time_from_ymdhms_utc(
     year: u64,
@@ -26,7 +26,7 @@ pub(crate) fn time_from_ymdhms_utc(
     hours: u64,
     minutes: u64,
     seconds: u64,
-) -> Result<UtcTime, ASNError> {
+) -> Result<UtcTime, ASNErrorVariant> {
     let days_before_year_since_unix_epoch = days_before_year_since_unix_epoch(year)?;
 
     const JAN: u64 = 31;
@@ -65,12 +65,12 @@ pub(crate) fn time_from_ymdhms_utc(
     Ok(UtcTime::from_seconds_since_epoch(seconds_since_unix_epoch))
 }
 
-fn days_before_year_since_unix_epoch(year: u64) -> Result<u64, ASNError> {
+fn days_before_year_since_unix_epoch(year: u64) -> Result<u64, ASNErrorVariant> {
     // We don't support dates before January 1, 1970 because that is the
     // Unix epoch. It is likely that other software won't deal well with
     // certificates that have dates before the epoch.
     if year < 1970 {
-        return Err(ASNError::BadUTCTime);
+        return Err(ASNErrorVariant::BadUTCTime);
     }
     let days_before_year_ad = days_before_year_ad(year);
     debug_assert!(days_before_year_ad >= DAYS_BEFORE_UNIX_EPOCH_AD);

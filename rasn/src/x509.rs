@@ -2,8 +2,8 @@ use crate::extensions::Extensions;
 use crate::parser::Parser;
 use crate::printer::{print_type, LinePrinter, Printable};
 use crate::types::{
-    ASNBitString, ASNError, ASNInteger, ASNObjectIdentifier, ASNType, ASNTypeId, BitString,
-    Integer, ObjectIdentifier, Sequence, Set, UtcTime,
+    ASNBitString, ASNError, ASNErrorVariant, ASNInteger, ASNObjectIdentifier, ASNType, ASNTypeId,
+    BitString, Integer, ObjectIdentifier, Sequence, Set, UtcTime,
 };
 
 #[derive(Debug)]
@@ -162,7 +162,7 @@ impl Validity {
         }
     }
 
-    fn parse(input: &[u8]) -> Result<Validity, ASNError> {
+    fn parse(input: &[u8]) -> Result<Validity, ASNErrorVariant> {
         Parser::parse_all(input, |parser| {
             Ok(Validity::new(
                 parser.expect::<UtcTime>()?,
@@ -207,7 +207,7 @@ impl<'a> RelativeDistinguishedName<'a> {
         }
     }
 
-    fn parse(input: &'a [u8]) -> Result<Self, ASNError> {
+    fn parse(input: &'a [u8]) -> Result<Self, ASNErrorVariant> {
         let mut result = Self::empty();
         let mut parser = Parser::new(input);
 
@@ -226,18 +226,18 @@ impl<'a> RelativeDistinguishedName<'a> {
         Ok(result)
     }
 
-    fn parse_single(&mut self, input: &'a [u8]) -> Result<(), ASNError> {
+    fn parse_single(&mut self, input: &'a [u8]) -> Result<(), ASNErrorVariant> {
         fn fill_name_component<'b>(
             value: &ASNType<'b>,
             component: &mut Option<&'b str>,
             oid: &ASNObjectIdentifier,
-        ) -> Result<(), ASNError> {
+        ) -> Result<(), ASNErrorVariant> {
             let str_value = match &value {
                 ASNType::IA5String(value) => value.value,
                 ASNType::PrintableString(value) => value.value,
                 ASNType::UTF8String(value) => value.value,
                 _ => {
-                    return Err(ASNError::UnexpectedType(
+                    return Err(ASNErrorVariant::UnexpectedType(
                         ASNTypeId::PrintableString,
                         value.get_id(),
                     ))
@@ -246,7 +246,7 @@ impl<'a> RelativeDistinguishedName<'a> {
 
             // We only accept a single instance of each AVA type
             match component {
-                Some(_) => Err(ASNError::UnexpectedOid(oid.clone())),
+                Some(_) => Err(ASNErrorVariant::UnexpectedOid(oid.clone())),
                 None => {
                     *component = Some(str_value);
                     Ok(())
@@ -314,7 +314,7 @@ impl<'a> Name<'a> {
         Self { inner: input }
     }
 
-    pub fn parse(&self) -> Result<RelativeDistinguishedName, ASNError> {
+    pub(crate) fn parse(&self) -> Result<RelativeDistinguishedName, ASNErrorVariant> {
         RelativeDistinguishedName::parse(self.inner)
     }
 }
@@ -344,7 +344,7 @@ impl<'a> SubjectPublicKeyInfo<'a> {
         }
     }
 
-    fn parse(input: &[u8]) -> Result<SubjectPublicKeyInfo, ASNError> {
+    fn parse(input: &[u8]) -> Result<SubjectPublicKeyInfo, ASNErrorVariant> {
         Parser::parse_all(input, |parser| {
             Ok(SubjectPublicKeyInfo::new(
                 AlgorithmIdentifier::parse(parser.expect::<Sequence>()?)?,
@@ -363,7 +363,7 @@ impl<'a> Printable for SubjectPublicKeyInfo<'a> {
 
 impl<'a> Certificate<'a> {
     pub fn parse(input: &[u8]) -> Result<Certificate, ASNError> {
-        Parser::parse_all(input, |p1| {
+        let ret = Parser::parse_all(input, |p1| {
             Parser::parse_all(p1.expect::<Sequence>()?, |p2| {
                 Ok(Certificate::new(
                     TBSCertificate::parse(p2.expect::<Sequence>()?)?,
@@ -371,10 +371,11 @@ impl<'a> Certificate<'a> {
                     p2.expect::<BitString>()?,
                 ))
             })
-        })
+        })?;
+        Ok(ret)
     }
 
-    pub fn new(
+    pub(crate) fn new(
         tbs_certificate: Constructed<'a, TBSCertificate<'a>>,
         signature_algorithm: AlgorithmIdentifier<'a>,
         signature_value: ASNBitString<'a>,
@@ -388,7 +389,7 @@ impl<'a> Certificate<'a> {
 }
 
 impl<'a> AlgorithmIdentifier<'a> {
-    fn parse(input: &[u8]) -> Result<AlgorithmIdentifier, ASNError> {
+    fn parse(input: &[u8]) -> Result<AlgorithmIdentifier, ASNErrorVariant> {
         let mut parser = Parser::new(input);
 
         Ok(AlgorithmIdentifier::new(
@@ -434,15 +435,15 @@ impl<'a> TBSCertificate<'a> {
         }
     }
 
-    fn parse(input: &[u8]) -> Result<Constructed<TBSCertificate>, ASNError> {
-        fn parse_version(parser: &mut Parser) -> Result<Version, ASNError> {
+    fn parse(input: &[u8]) -> Result<Constructed<TBSCertificate>, ASNErrorVariant> {
+        fn parse_version(parser: &mut Parser) -> Result<Version, ASNErrorVariant> {
             match parser.get_optional_explicit_tag_value::<Integer>(0)? {
                 Some(value) => match value.as_i32() {
                     Some(0) => Ok(Version::V1),
                     Some(1) => Ok(Version::V2),
                     Some(2) => Ok(Version::V3),
-                    Some(x) => Err(ASNError::BadEnumValue("version", x)),
-                    None => Err(ASNError::IntegerTooLarge(value.bytes.len())),
+                    Some(x) => Err(ASNErrorVariant::BadEnumValue("version", x)),
+                    None => Err(ASNErrorVariant::IntegerTooLarge(value.bytes.len())),
                 },
                 None => Ok(Version::V1),
             }
@@ -451,7 +452,7 @@ impl<'a> TBSCertificate<'a> {
         fn parse_optional_bitstring<'a>(
             parser: &mut Parser<'a>,
             tag: u8,
-        ) -> Result<Option<ASNBitString<'a>>, ASNError> {
+        ) -> Result<Option<ASNBitString<'a>>, ASNErrorVariant> {
             // TODO: check minimum version
             match parser.get_optional_explicit_tag(tag)? {
                 Some(tag) => Parser::parse_all(tag.contents, |parser| {
@@ -463,7 +464,7 @@ impl<'a> TBSCertificate<'a> {
 
         fn parse_extensions<'a>(
             parser: &mut Parser<'a>,
-        ) -> Result<Option<Extensions<'a>>, ASNError> {
+        ) -> Result<Option<Extensions<'a>>, ASNErrorVariant> {
             // TODO: check minimum version
             if let Some(tag) = parser.get_optional_explicit_tag(3)? {
                 Ok(Some(Extensions::new(tag.contents)))
@@ -472,7 +473,9 @@ impl<'a> TBSCertificate<'a> {
             }
         }
 
-        fn parse_tbs_cert<'a>(parser: &mut Parser<'a>) -> Result<TBSCertificate<'a>, ASNError> {
+        fn parse_tbs_cert<'a>(
+            parser: &mut Parser<'a>,
+        ) -> Result<TBSCertificate<'a>, ASNErrorVariant> {
             Ok(TBSCertificate::new(
                 parse_version(parser)?,
                 parser.expect::<Integer>()?,
