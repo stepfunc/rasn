@@ -1,5 +1,5 @@
 use crate::der::parser::Parser;
-use crate::der::types::*;
+use crate::der::*;
 use crate::x509::printer::{print_type, LinePrinter, Printable};
 
 #[derive(Debug)]

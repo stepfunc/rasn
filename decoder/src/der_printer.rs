@@ -1,5 +1,5 @@
-use rasn::der::types::{ASNError, ASNType};
 use rasn::der::ParseHandler;
+use rasn::der::{ASNError, ASNType};
 
 pub struct ParsePrinter {
     indent: usize,

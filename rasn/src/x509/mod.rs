@@ -2,7 +2,7 @@ pub mod ext;
 pub mod printer;
 
 use crate::der::parser::Parser;
-use crate::der::types::*;
+use crate::der::*;
 use crate::x509::ext::Extensions;
 use crate::x509::printer::{print_type, LinePrinter, Printable};
 

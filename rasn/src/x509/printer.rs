@@ -15,7 +15,7 @@ pub trait Printable {
     fn print(&self, printer: &mut dyn LinePrinter);
 }
 
-pub fn print_type(name: &str, printable: &dyn Printable, printer: &mut dyn LinePrinter) {
+pub(crate) fn print_type(name: &str, printable: &dyn Printable, printer: &mut dyn LinePrinter) {
     printer.begin_line();
     printer.println_fmt(&format_args!("{}:", name));
     printer.begin_type();
