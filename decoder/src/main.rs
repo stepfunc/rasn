@@ -36,13 +36,13 @@ pub fn main() -> Result<(), std::io::Error> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() != 3 {
-        eprintln!("requires exactly 2 arguments: decoder <--der | --x509> <filename>");
+        eprintln!("requires exactly 2 arguments: decoder <--der | --certs> <filename>");
         process::exit(-1);
     }
 
     match args[1].as_str() {
         "--der" => parse_der(&get_bytes(&args[2])?),
-        "--x509" => parse_x509(&get_bytes(&args[2])?),
+        "--certs" => parse_x509(&get_bytes(&args[2])?),
         unknown => {
             eprintln!("Unknown flag: {}", unknown);
             process::exit(-1);
