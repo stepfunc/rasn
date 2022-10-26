@@ -1,7 +1,9 @@
+pub mod ext;
+
 use crate::asn::parser::Parser;
 use crate::asn::types::*;
-use crate::extensions::Extensions;
 use crate::printer::{print_type, LinePrinter, Printable};
+use crate::x509::ext::Extensions;
 
 #[derive(Debug)]
 pub struct Constructed<'a, T> {
