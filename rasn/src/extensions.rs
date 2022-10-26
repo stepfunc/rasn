@@ -1,9 +1,6 @@
-use crate::parser::Parser;
+use crate::asn::parser::Parser;
+use crate::asn::types::*;
 use crate::printer::{print_type, LinePrinter, Printable};
-use crate::types::{
-    ASNError, ASNErrorVariant, ASNObjectIdentifier, BitString, Boolean, ExplicitTag, IA5String,
-    Integer, ObjectIdentifier, OctetString, Sequence, UTF8String,
-};
 
 #[derive(Debug)]
 pub struct Extensions<'a> {

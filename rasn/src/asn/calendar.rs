@@ -17,7 +17,7 @@
 // ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 // OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-use crate::types::{ASNErrorVariant, UtcTime};
+use crate::asn::types::{ASNErrorVariant, UtcTime};
 
 pub(crate) fn time_from_ymdhms_utc(
     year: u64,

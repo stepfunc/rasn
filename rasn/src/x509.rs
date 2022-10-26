@@ -1,10 +1,7 @@
+use crate::asn::parser::Parser;
+use crate::asn::types::*;
 use crate::extensions::Extensions;
-use crate::parser::Parser;
 use crate::printer::{print_type, LinePrinter, Printable};
-use crate::types::{
-    ASNBitString, ASNError, ASNErrorVariant, ASNInteger, ASNObjectIdentifier, ASNType, ASNTypeId,
-    BitString, Integer, ObjectIdentifier, Sequence, Set, UtcTime,
-};
 
 #[derive(Debug)]
 pub struct Constructed<'a, T> {
@@ -69,7 +66,7 @@ impl<'a> Printable for AlgorithmIdentifier<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Version {
     V1,
     V2,

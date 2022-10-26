@@ -1,5 +1,5 @@
-use crate::parser::Parser;
-use crate::types::{ASNError, ASNType};
+use crate::asn::parser::Parser;
+use crate::asn::types::{ASNError, ASNType};
 
 pub trait ParseHandler {
     fn begin_constructed(&mut self);
@@ -63,7 +63,7 @@ mod tests {
     fn parses_rsa_x509_without_error() {
         // just checking that an error doesn't occur
         parse_all(
-            include_bytes!("../../x509/512b-rsa-example-cert.der"),
+            include_bytes!("../../../x509/512b-rsa-example-cert.der"),
             &mut MockHandler {},
         )
         .unwrap();
@@ -73,7 +73,7 @@ mod tests {
     fn parses_ed22519_x509_without_error() {
         // just checking that an error doesn't occur
         parse_all(
-            include_bytes!("../../x509/ed25519-example-cert.der"),
+            include_bytes!("../../../x509/ed25519-example-cert.der"),
             &mut MockHandler {},
         )
         .unwrap();

@@ -1,9 +1,9 @@
 use core::str;
 
-use crate::calendar;
-use crate::reader::Reader;
-use crate::types::ASNErrorVariant::UnsupportedId;
-use crate::types::*;
+use crate::asn::calendar;
+use crate::asn::reader::Reader;
+use crate::asn::types::ASNErrorVariant;
+use crate::asn::types::*;
 
 type ASNResult<'a> = Result<ASNType<'a>, ASNErrorVariant>;
 
@@ -369,7 +369,7 @@ impl<'a> Parser<'a> {
                 Ok(Some(self.expect::<ExplicitTag>()?))
             }
             Some(_) => Ok(None),
-            None => Err(UnsupportedId(id)),
+            None => Err(ASNErrorVariant::UnsupportedId(id)),
         }
     }
 
@@ -395,7 +395,7 @@ impl<'a> Parser<'a> {
         match read_type(&id) {
             Some((ref id, _)) if *id == T::get_id() => Ok(Some(self.expect::<T>()?)),
             Some(_) => Ok(None),
-            None => Err(UnsupportedId(id)),
+            None => Err(ASNErrorVariant::UnsupportedId(id)),
         }
     }
 

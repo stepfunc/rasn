@@ -1,5 +1,5 @@
-use crate::oid::get_oid;
-use crate::reader;
+use crate::asn::oid::get_oid;
+use crate::asn::reader;
 
 use core::fmt::Display;
 use std::fmt::Formatter;
