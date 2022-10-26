@@ -314,8 +314,9 @@ impl<'a> Name<'a> {
         Self { inner: input }
     }
 
-    pub(crate) fn parse(&self) -> Result<RelativeDistinguishedName, ASNErrorVariant> {
-        RelativeDistinguishedName::parse(self.inner)
+    pub fn parse(&self) -> Result<RelativeDistinguishedName, ASNError> {
+        let name = RelativeDistinguishedName::parse(self.inner)?;
+        Ok(name)
     }
 }
 
