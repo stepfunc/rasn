@@ -5,9 +5,9 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::process;
 
-use rasn::der::parse_all;
-use rasn::x509::printer::{ConsoleLinePrinter, Printable};
-use rasn::x509::Certificate;
+use rx509::der::parse_all;
+use rx509::x509::printer::{ConsoleLinePrinter, Printable};
+use rx509::x509::Certificate;
 
 fn get_bytes(file: &str) -> Result<Vec<u8>, std::io::Error> {
     let mut f = File::open(file)?;

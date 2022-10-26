@@ -1,5 +1,5 @@
 [package]
-name = "rasn"
+name = "rx509"
 version = "0.2.0"
 authors = ["Step Function I/O <info@stepfunc.io>"]
 edition = "2021"

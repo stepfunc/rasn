@@ -1,5 +1,5 @@
-use rasn::der::ParseHandler;
-use rasn::der::{ASNError, ASNType};
+use rx509::der::ParseHandler;
+use rx509::der::{ASNError, ASNType};
 
 pub struct ParsePrinter {
     indent: usize,
