@@ -1,13 +1,24 @@
+/// Panic-free cursor-like type for reading bytes and slices
+#[derive(Copy, Clone, Debug)]
 pub struct Reader<'a> {
     bytes: &'a [u8],
 }
 
-#[derive(Debug)]
+/// Reached the end of the stream before reading the expected type
+#[derive(Copy, Clone, Debug)]
 pub struct EndOfStream;
 
+impl core::fmt::Display for EndOfStream {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("end of stream")
+    }
+}
+
+impl std::error::Error for EndOfStream {}
+
 impl<'a> Reader<'a> {
-    pub fn new(bytes: &'a [u8]) -> Reader {
-        Reader { bytes }
+    pub fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes }
     }
 
     pub fn clear(&mut self) {
@@ -22,32 +33,24 @@ impl<'a> Reader<'a> {
         self.bytes.len()
     }
 
-    pub fn peek_or_fail(&self) -> Result<u8, EndOfStream> {
-        if self.bytes.is_empty() {
-            Err(EndOfStream)
-        } else {
-            Ok(self.bytes[0])
+    pub fn peek_byte(&self) -> Result<u8, EndOfStream> {
+        match self.bytes.get(0) {
+            None => Err(EndOfStream),
+            Some(x) => Ok(*x),
         }
     }
 
     pub fn read_byte(&mut self) -> Result<u8, EndOfStream> {
-        if self.bytes.is_empty() {
-            Err(EndOfStream)
-        } else {
-            let value: u8 = self.bytes[0];
-            self.bytes = &self.bytes[1..];
-            Ok(value)
-        }
+        let (first, remainder) = self.bytes.split_first().ok_or(EndOfStream)?;
+        self.bytes = remainder;
+        Ok(*first)
     }
 
     pub fn take(&mut self, count: usize) -> Result<&'a [u8], EndOfStream> {
-        if self.bytes.len() < count {
-            Err(EndOfStream)
-        } else {
-            let ret = &self.bytes[0..count];
-            self.bytes = &self.bytes[count..];
-            Ok(ret)
-        }
+        let ret = self.bytes.get(0..count).ok_or(EndOfStream)?;
+        let remainder = self.bytes.get(count..).ok_or(EndOfStream)?;
+        self.bytes = remainder;
+        Ok(ret)
     }
 
     pub fn remainder(&self) -> &'a [u8] {

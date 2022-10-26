@@ -3,9 +3,9 @@ pub trait LinePrinter {
 
     fn begin_line(&mut self);
 
-    fn print_fmt(&mut self, fmt: &std::fmt::Arguments);
+    fn print_fmt(&mut self, fmt: &core::fmt::Arguments);
     fn print_str(&mut self, s: &str);
-    fn println_fmt(&mut self, fmt: &std::fmt::Arguments);
+    fn println_fmt(&mut self, fmt: &core::fmt::Arguments);
     fn println_str(&mut self, line: &str);
 
     fn end_type(&mut self);
@@ -54,7 +54,7 @@ impl LinePrinter for ConsoleLinePrinter {
         self.print_indent();
     }
 
-    fn print_fmt(&mut self, args: &std::fmt::Arguments) {
+    fn print_fmt(&mut self, args: &core::fmt::Arguments) {
         print!("{}", args)
     }
 
@@ -62,7 +62,7 @@ impl LinePrinter for ConsoleLinePrinter {
         print!("{}", s)
     }
 
-    fn println_fmt(&mut self, args: &std::fmt::Arguments) {
+    fn println_fmt(&mut self, args: &core::fmt::Arguments) {
         println!("{}", args)
     }
 

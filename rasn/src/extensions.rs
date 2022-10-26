@@ -4,7 +4,6 @@ use crate::types::{
     ASNError, ASNObjectIdentifier, BitString, Boolean, ExplicitTag, IA5String, Integer,
     ObjectIdentifier, OctetString, Sequence, UTF8String,
 };
-use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct Extensions<'a> {

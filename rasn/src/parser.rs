@@ -1,4 +1,4 @@
-use std::str;
+use core::str;
 
 use crate::calendar;
 use crate::reader::Reader;
@@ -379,7 +379,7 @@ impl<'a> Parser<'a> {
             return Ok(None);
         }
 
-        let id = Identifier::from(self.reader.peek_or_fail()?);
+        let id = Identifier::from(self.reader.peek_byte()?);
 
         match read_type(&id) {
             Some((ASNTypeId::ExplicitTag, actual_tag)) if tag == actual_tag => {
@@ -405,7 +405,7 @@ impl<'a> Parser<'a> {
             return Ok(None);
         }
 
-        let id = Identifier::from(self.reader.peek_or_fail()?);
+        let id = Identifier::from(self.reader.peek_byte()?);
 
         match read_type(&id) {
             Some((ref id, _)) if *id == T::get_id() => Ok(Some(self.expect::<T>()?)),

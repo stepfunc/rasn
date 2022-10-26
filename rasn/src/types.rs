@@ -1,6 +1,7 @@
 use crate::oid::get_oid;
 use crate::reader;
-use std::fmt::Display;
+
+use core::fmt::Display;
 
 #[derive(Debug, PartialEq)]
 pub struct ASNInteger<'a> {
@@ -47,14 +48,14 @@ impl Identifier {
             PC::Primitive
         };
 
-        let tag = byte & 0b001_1111;
+        let tag = byte & 0b0001_1111;
 
         Identifier::new(class, pc, tag)
     }
 }
 
 impl<'a> ASNInteger<'a> {
-    const VALID_I32_LENGTHS: std::ops::Range<usize> = 1usize..4usize;
+    const VALID_I32_LENGTHS: core::ops::Range<usize> = 1usize..4usize;
 
     pub fn new(bytes: &'a [u8]) -> ASNInteger {
         ASNInteger { bytes }
@@ -76,7 +77,7 @@ impl<'a> ASNInteger<'a> {
 }
 
 impl<'a> Display for ASNInteger<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self.as_i32() {
             Some(x) => write!(f, "{}", x),
             None => {
@@ -184,7 +185,7 @@ impl ASNObjectIdentifier {
 }
 
 impl Display for ASNObjectIdentifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> Result<(), core::fmt::Error> {
         match get_oid(self.values()) {
             Some(oid) => f.write_str(oid.to_str()),
             None => {
@@ -567,8 +568,8 @@ impl<'a> ASNType<'a> {
     }
 }
 
-impl<'a> std::fmt::Display for ASNType<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl<'a> core::fmt::Display for ASNType<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             ASNType::Boolean(wrapper) => write!(f, "Boolean: {}", wrapper.value),
             ASNType::Sequence(_) => write!(f, "Sequence"),
@@ -611,7 +612,7 @@ pub enum ASNError {
     UnsupportedLengthByteCount(u8),
     BadLengthEncoding(u8, usize), // count of bytes followed by the value
     BadOidLength,
-    BadUTF8(std::str::Utf8Error),
+    BadUTF8(core::str::Utf8Error),
     BadUTCTime,
     BitStringUnusedBitsTooLarge(u8),
     // these errors relate to schemas
@@ -623,20 +624,20 @@ pub enum ASNError {
     UnexpectedTag(u8),                    // unexpected tag
 }
 
-impl std::convert::From<reader::EndOfStream> for ASNError {
+impl core::convert::From<reader::EndOfStream> for ASNError {
     fn from(_: reader::EndOfStream) -> Self {
         ASNError::EndOfStream
     }
 }
 
-impl std::convert::From<std::str::Utf8Error> for ASNError {
-    fn from(err: std::str::Utf8Error) -> Self {
+impl core::convert::From<core::str::Utf8Error> for ASNError {
+    fn from(err: core::str::Utf8Error) -> Self {
         ASNError::BadUTF8(err)
     }
 }
 
-impl std::fmt::Display for ASNError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl core::fmt::Display for ASNError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             ASNError::BadBooleanLength(len) => write!(f, "Bad boolean length: {}", len),
             ASNError::BadBooleanValue(value) => write!(f, "Bad boolean value: {}", value),

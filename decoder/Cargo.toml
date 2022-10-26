@@ -1,8 +1,8 @@
 [package]
 name = "decoder"
 version = "0.1.0"
-authors = ["Adam Crain <adam@stepfunc.io>", "Émile Grégoire <emile@stepfunc.io>"]
-edition = "2018"
+authors = ["Step Function I/O <info@stepfunc.io>"]
+edition = "2021"
 
 [dependencies]
 rasn = { path = "../rasn" }
