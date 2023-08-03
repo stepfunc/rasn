@@ -1,6 +1,9 @@
 pub mod ext;
 pub mod printer;
 
+#[cfg(test)]
+mod tests;
+
 use crate::der::parser::Parser;
 use crate::der::*;
 use crate::x509::ext::Extensions;

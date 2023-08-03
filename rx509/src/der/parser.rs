@@ -68,7 +68,7 @@ impl TimeType {
                 (hi, lo)
             }
         };
-       Ok((year_hi * 100) + year_lo)
+        Ok((year_hi * 100) + year_lo)
     }
 }
 
@@ -269,6 +269,7 @@ fn read_type(id: &Identifier) -> Option<(ASNTypeId, u8)> {
             0x13 => Some((ASNTypeId::PrintableString, *tag)),
             0x16 => Some((ASNTypeId::IA5String, *tag)),
             0x17 => Some((ASNTypeId::UTCTime, *tag)),
+            0x18 => Some((ASNTypeId::GeneralizedTime, *tag)),
 
             _ => None,
         },
