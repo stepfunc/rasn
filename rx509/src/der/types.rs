@@ -201,7 +201,7 @@ impl std::fmt::Display for ASNObjectIdentifier {
 
 pub trait ASNWrapperType<'a> {
     type Item;
-    
+
     fn get_id() -> ASNTypeId;
     fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item>;
 }
