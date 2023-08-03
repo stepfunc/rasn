@@ -1,9 +1,6 @@
 use crate::der::oid::get_oid;
 use crate::der::reader;
 
-use core::fmt::Display;
-use std::fmt::Formatter;
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct ASNInteger<'a> {
     pub bytes: &'a [u8],
@@ -77,7 +74,7 @@ impl<'a> ASNInteger<'a> {
     }
 }
 
-impl<'a> Display for ASNInteger<'a> {
+impl<'a> std::fmt::Display for ASNInteger<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self.as_i32() {
             Some(x) => write!(f, "{}", x),
@@ -185,7 +182,7 @@ impl ASNObjectIdentifier {
     }
 }
 
-impl Display for ASNObjectIdentifier {
+impl std::fmt::Display for ASNObjectIdentifier {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> Result<(), core::fmt::Error> {
         match get_oid(self.values()) {
             Some(oid) => f.write_str(oid.to_str()),
@@ -205,7 +202,6 @@ impl Display for ASNObjectIdentifier {
 pub trait ASNWrapperType<'a> {
     type Item;
 
-    //fn new<'b>(value: Self::Item) -> ASNType<'b>;
     fn get_id() -> ASNTypeId;
     fn get_value(asn_type: ASNType<'a>) -> Option<Self::Item>;
 }
@@ -637,20 +633,20 @@ pub(crate) enum ASNErrorVariant {
 }
 
 impl core::fmt::Display for ASNError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.variant)
     }
 }
 
 impl std::error::Error for ASNError {}
 
-impl core::convert::From<reader::EndOfStream> for ASNErrorVariant {
+impl From<reader::EndOfStream> for ASNErrorVariant {
     fn from(_: reader::EndOfStream) -> Self {
         ASNErrorVariant::EndOfStream
     }
 }
 
-impl core::convert::From<core::str::Utf8Error> for ASNErrorVariant {
+impl From<core::str::Utf8Error> for ASNErrorVariant {
     fn from(err: core::str::Utf8Error) -> Self {
         ASNErrorVariant::BadUTF8(err)
     }

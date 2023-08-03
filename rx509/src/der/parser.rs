@@ -54,6 +54,43 @@ fn parse_generalized_time(contents: &[u8]) -> ASNResult {
     parse_time(contents, TimeType::Generalized)
 }
 
+impl TimeType {
+    fn parse_year(self, reader: &mut Reader) -> Result<u64, ASNErrorVariant> {
+        let (year_hi, year_lo) = match self {
+            TimeType::Utc => {
+                let lo = read_two_digits(reader, 0, 99)?;
+                let hi = if lo >= 50 { 19 } else { 20 };
+                (hi, lo)
+            }
+            TimeType::Generalized => {
+                let hi = read_two_digits(reader, 0, 99)?;
+                let lo = read_two_digits(reader, 0, 99)?;
+                (hi, lo)
+            }
+        };
+        Ok((year_hi * 100) + year_lo)
+    }
+}
+
+fn read_two_digits(inner: &mut Reader, min: u64, max: u64) -> Result<u64, ASNErrorVariant> {
+    fn read_digit(inner: &mut Reader) -> Result<u64, ASNErrorVariant> {
+        const DIGIT: core::ops::RangeInclusive<u8> = b'0'..=b'9';
+        let b = inner.read_byte().map_err(|_| ASNErrorVariant::BadUTCTime)?;
+        if DIGIT.contains(&b) {
+            return Ok(u64::from(b - DIGIT.start()));
+        }
+        Err(ASNErrorVariant::BadUTCTime)
+    }
+
+    let hi = read_digit(inner)?;
+    let lo = read_digit(inner)?;
+    let value = (hi * 10) + lo;
+    if value < min || value > max {
+        return Err(ASNErrorVariant::BadUTCTime);
+    }
+    Ok(value)
+}
+
 fn parse_time(contents: &[u8], time_type: TimeType) -> ASNResult {
     // This code is highly inspired from webpki available here:
     // https://github.com/briansmith/webpki/blob/18cda8a5e32dfc2723930018853a984bd634e667/src/der.rs#L113-L166
@@ -82,39 +119,7 @@ fn parse_time(contents: &[u8], time_type: TimeType) -> ASNResult {
 
     let mut reader = Reader::new(contents);
 
-    fn read_digit(inner: &mut Reader) -> Result<u64, ASNErrorVariant> {
-        const DIGIT: core::ops::RangeInclusive<u8> = b'0'..=b'9';
-        let b = inner.read_byte().map_err(|_| ASNErrorVariant::BadUTCTime)?;
-        if DIGIT.contains(&b) {
-            return Ok(u64::from(b - DIGIT.start()));
-        }
-        Err(ASNErrorVariant::BadUTCTime)
-    }
-
-    fn read_two_digits(inner: &mut Reader, min: u64, max: u64) -> Result<u64, ASNErrorVariant> {
-        let hi = read_digit(inner)?;
-        let lo = read_digit(inner)?;
-        let value = (hi * 10) + lo;
-        if value < min || value > max {
-            return Err(ASNErrorVariant::BadUTCTime);
-        }
-        Ok(value)
-    }
-
-    let (year_hi, year_lo) = match time_type {
-        TimeType::Utc => {
-            let lo = read_two_digits(&mut reader, 0, 99)?;
-            let hi = if lo >= 50 { 19 } else { 20 };
-            (hi, lo)
-        }
-        TimeType::Generalized => {
-            let hi = read_two_digits(&mut reader, 0, 99)?;
-            let lo = read_two_digits(&mut reader, 0, 99)?;
-            (hi, lo)
-        }
-    };
-
-    let year = (year_hi * 100) + year_lo;
+    let year = time_type.parse_year(&mut reader)?;
     let month = read_two_digits(&mut reader, 1, 12)?;
     let days_in_month = calendar::days_in_month(year, month);
     let day_of_month = read_two_digits(&mut reader, 1, days_in_month)?;
@@ -264,6 +269,7 @@ fn read_type(id: &Identifier) -> Option<(ASNTypeId, u8)> {
             0x13 => Some((ASNTypeId::PrintableString, *tag)),
             0x16 => Some((ASNTypeId::IA5String, *tag)),
             0x17 => Some((ASNTypeId::UTCTime, *tag)),
+            0x18 => Some((ASNTypeId::GeneralizedTime, *tag)),
 
             _ => None,
         },
